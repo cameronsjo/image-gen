@@ -94,5 +94,8 @@ docs/_build/
 .cursorignore
 .cursorindexingignore
 
+# Claude Code local settings (may contain API keys)
+.claude/settings.local.json
+
 # Generated images
 output/

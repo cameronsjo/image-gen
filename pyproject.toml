@@ -1,7 +1,45 @@
 [project]
 name = "image-gen"
 version = "0.1.0"
-description = "Add your description here"
+description = "Image generation toolkit powered by Gemini 3 Pro"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "aiosqlite>=0.21.0",
+    "fastapi>=0.115.0",
+    "fastmcp>=2.14.0",
+    "google-genai>=1.64.0",
+    "httpx>=0.28.0",
+    "pydantic-settings>=2.7.0",
+    "pyjwt[crypto]>=2.10.0",
+    "python-ulid>=3.0.0",
+    "pyyaml>=6.0",
+    "structlog>=25.1.0",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.9.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/image_gen"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

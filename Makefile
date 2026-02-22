@@ -14,6 +14,18 @@ install:
 run:
 	uv run python -m image_gen
 
+# Run in development mode (auth disabled, local data dir)
+.PHONY: dev
+dev:
+	IMAGEGEN_AUTH_ENABLED=false IMAGEGEN_DATA_DIR=./data IMAGEGEN_LOG_LEVEL=DEBUG uv run python -m image_gen
+
+## Build
+
+# Build Docker image
+.PHONY: docker-build
+docker-build:
+	docker build -t image-gen .
+
 # Run tests
 .PHONY: test
 test:
