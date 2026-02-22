@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+.beads
+.claude
+.ruff_cache
+__pycache__
+*.pyc
+data/
+docs/
+tests/
+*.md
+!README.md
+LICENSE
+Makefile
