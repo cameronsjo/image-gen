@@ -26,8 +26,9 @@ RUN groupadd --gid 1000 appuser && \
 
 WORKDIR /app
 
-# Copy the virtual environment from builder
+# Copy the virtual environment and source from builder
 COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
 
 # Default data directory
 RUN mkdir -p /app/data/images && chown -R appuser:appuser /app/data
