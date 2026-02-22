@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/cameronsjo/image-gen/compare/v0.1.2...v0.1.3) (2026-02-22)
+
+
+### Bug Fixes
+
+* copy source tree to runtime stage for editable install ([cb1ff0a](https://github.com/cameronsjo/image-gen/commit/cb1ff0ad4a05c54cf6b1d5346971323c8768f1dd))
+
 ## [0.1.2](https://github.com/cameronsjo/image-gen/compare/v0.1.1...v0.1.2) (2026-02-22)
 
 
