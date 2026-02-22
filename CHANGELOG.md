@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/cameronsjo/image-gen/compare/v0.1.1...v0.1.2) (2026-02-22)
+
+
+### Bug Fixes
+
+* include README.md in Docker build for hatchling ([4bc677e](https://github.com/cameronsjo/image-gen/commit/4bc677e94bc76c830ca39bf9cce3d75bff15fc1d))
+
 ## [0.1.1](https://github.com/cameronsjo/image-gen/compare/v0.1.0...v0.1.1) (2026-02-22)
 
 
