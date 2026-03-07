@@ -94,7 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Mount MCP server at /mcp
     mcp = create_mcp_server(settings)
-    mcp_app = mcp.http_app(path="/mcp")
+    mcp_app = mcp.http_app(path="/")
     app.mount("/mcp", mcp_app)
 
     return app
