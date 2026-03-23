@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/cameronsjo/image-gen/compare/v0.1.4...v0.1.5) (2026-03-23)
+
+
+### Documentation
+
+* add field report for FastMCP ASGI integration fix ([f49258e](https://github.com/cameronsjo/image-gen/commit/f49258ec3ff8ae06507e06730a72c9008c824d82))
+
 ## [0.1.4](https://github.com/cameronsjo/image-gen/compare/v0.1.3...v0.1.4) (2026-03-23)
 
 
