@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.1.4](https://github.com/cameronsjo/image-gen/compare/v0.1.3...v0.1.4) (2026-03-23)
+
+
+### Features
+
+* add test suite, fix MCP path, update README ([219da89](https://github.com/cameronsjo/image-gen/commit/219da89a8379339f7abc36ac03668870848e25f0))
+
+
+### Bug Fixes
+
+* **mcp:** resolve 307 redirect and lifespan initialization on /mcp ([545689d](https://github.com/cameronsjo/image-gen/commit/545689d6337ae7b629a20f2d6db6d984c4ac7d70))
+
+
+### Documentation
+
+* add field report for first deploy pipeline ([e083bf6](https://github.com/cameronsjo/image-gen/commit/e083bf6203f1cdaa96ab540c5cf6a36fabf98d94))
+
 ## [0.1.3](https://github.com/cameronsjo/image-gen/compare/v0.1.2...v0.1.3) (2026-02-22)
 
 
