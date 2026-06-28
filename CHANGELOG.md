@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/cameronsjo/image-gen/compare/v0.1.5...v0.1.6) (2026-06-28)
+
+
+### Features
+
+* add shared exception hierarchy (foundation for multi-provider work) ([de5d8df](https://github.com/cameronsjo/image-gen/commit/de5d8df29dfed05aa4eec80af477d514d6b1aee9))
+* multi-provider image generation + security hardening + standards ([#13](https://github.com/cameronsjo/image-gen/issues/13)) ([9d5ecbf](https://github.com/cameronsjo/image-gen/commit/9d5ecbf47cfdeebdbd284e61ec536caf378c6169))
+
 ## [0.1.5](https://github.com/cameronsjo/image-gen/compare/v0.1.4...v0.1.5) (2026-03-23)
 
 
