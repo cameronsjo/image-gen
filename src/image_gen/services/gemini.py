@@ -2,7 +2,11 @@
 
 Wraps the synchronous Google GenAI SDK in an async executor call with:
 
-- Timeout via :func:`asyncio.timeout` so a hung SDK call cannot exhaust the thread pool.
+- A best-effort timeout via :func:`asyncio.timeout`. This cancels the *awaiting*
+  coroutine but cannot interrupt the underlying SDK call — Python threads are not
+  killable, so a persistently hung upstream still occupies its worker thread until it
+  returns. A bounded executor or a native async client is the structural fix (tracked
+  as a follow-up); the timeout still bounds the caller's wait.
 - Typed retry on :class:`google.genai.errors.ServerError` (HTTP 503 / UNAVAILABLE) with
   exponential back-off.
 - Domain errors mapped to :class:`~image_gen.exceptions.ProviderError` instead of bare

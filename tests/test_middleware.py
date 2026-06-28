@@ -61,3 +61,37 @@ async def test_different_requests_get_different_ids(client: AsyncClient) -> None
     r1 = await client.get("/health")
     r2 = await client.get("/health")
     assert r1.headers["x-request-id"] != r2.headers["x-request-id"]
+
+
+async def test_malicious_request_id_not_reflected() -> None:
+    """A CRLF header-injection attempt in X-Request-ID is dropped, not echoed.
+
+    Driven at the ASGI scope level because httpx rejects CRLF in outgoing
+    header values client-side — so the defense must be proven on the middleware.
+    """
+    from image_gen.middleware import RequestIDMiddleware
+
+    sent: list[dict] = []
+
+    async def dummy_app(scope: dict, receive: object, send: object) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": []})  # type: ignore[operator]
+        await send({"type": "http.response.body", "body": b""})  # type: ignore[operator]
+
+    async def receive() -> dict:
+        return {"type": "http.request"}
+
+    async def send(message: dict) -> None:
+        sent.append(message)
+
+    middleware = RequestIDMiddleware(dummy_app)
+    scope = {"type": "http", "headers": [(b"x-request-id", b"abc\r\nX-Injected: evil")]}
+    await middleware(scope, receive, send)
+
+    start = next(m for m in sent if m["type"] == "http.response.start")
+    rid_values = [v for (k, v) in start["headers"] if k == b"x-request-id"]
+    assert len(rid_values) == 1
+    rid = rid_values[0]
+    assert b"\r" not in rid and b"\n" not in rid
+    assert b"X-Injected" not in rid
+    # The malicious value is discarded; a clean uuid4 hex is generated instead.
+    assert len(rid) == 32

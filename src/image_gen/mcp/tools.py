@@ -40,7 +40,9 @@ def _resolve_user(ctx: Context | None) -> str:
     if ctx and ctx.request_context and hasattr(ctx.request_context, "access_token"):
         token = ctx.request_context.access_token
         if token and hasattr(token, "sub"):
-            return str(token.sub)
+            sub = str(token.sub).strip()
+            if sub:
+                return sub
     return "anonymous"
 
 
@@ -54,18 +56,18 @@ def _categorize(exc: Exception) -> tuple[str, str]:
     """Map a domain error to a (log category, user-facing phrase) pair."""
     if isinstance(exc, ProviderNotConfiguredError):
         return "provider_not_configured", "the requested provider is not configured"
-    if isinstance(exc, UnsupportedParameterError):
+    elif isinstance(exc, UnsupportedParameterError):
         return (
             "unsupported_parameter",
             "the requested aspect-ratio / resolution combination is not supported",
         )
-    if isinstance(exc, ProviderError):
+    elif isinstance(exc, ProviderError):
         return "provider_error", "the image provider returned an error"
-    if isinstance(exc, QuotaExceededError):
+    elif isinstance(exc, QuotaExceededError):
         return "quota_exceeded", "the quota for this user is exhausted"
-    if isinstance(exc, StorageError):
+    elif isinstance(exc, StorageError):
         return "storage_error", "the image could not be stored or retrieved"
-    if isinstance(exc, ImageGenError):
+    elif isinstance(exc, ImageGenError):
         return "domain_error", "an internal image-gen error occurred"
     return "unexpected_error", "an unexpected error occurred"
 
@@ -198,7 +200,7 @@ def register(mcp: FastMCP) -> None:
                 category=category,
                 error=str(exc),
             )
-            return f"Image generation failed: {detail} ({exc})"
+            return f"Image generation failed: {detail} (id: {record.id})"
 
     @mcp.tool
     async def list_images(
@@ -225,7 +227,7 @@ def register(mcp: FastMCP) -> None:
             logger.error(
                 "MCP list_images failed", user_id=user_id, category=category, error=str(exc)
             )
-            return f"Failed to list images: {detail} ({exc})"
+            return f"Failed to list images: {detail}"
 
         if not records:
             return "No images found."
@@ -261,7 +263,7 @@ def register(mcp: FastMCP) -> None:
             logger.error(
                 "MCP get_quota_status failed", user_id=user_id, category=category, error=str(exc)
             )
-            return f"Failed to retrieve quota status: {detail} ({exc})"
+            return f"Failed to retrieve quota status: {detail}"
 
         next_at = status.next_token_at
         next_str = next_at.isoformat() if next_at else "available now"

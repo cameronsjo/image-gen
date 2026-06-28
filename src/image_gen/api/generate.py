@@ -142,7 +142,15 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             provider=provider_name,
             error=error_msg,
         )
-        raise HTTPException(status_code=500, detail={"error": error_msg}) from e
+        # Don't echo the raw provider error (may embed upstream/internal detail).
+        # The full message is logged and stored on the owner's record.
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "The image provider returned an error.",
+                "generation_id": record.id,
+            },
+        ) from e
 
     except Exception as e:
         error_msg = str(e)
@@ -160,4 +168,10 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             provider=provider_name,
             error=error_msg,
         )
-        raise HTTPException(status_code=500, detail={"error": error_msg}) from e
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "An unexpected error occurred during image generation.",
+                "generation_id": record.id,
+            },
+        ) from e

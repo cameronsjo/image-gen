@@ -55,11 +55,22 @@ class QuotaService:
             return float(row["tokens"]), datetime.fromisoformat(row["last_refill_at"])
 
         now = datetime.now(UTC)
+        # INSERT OR IGNORE so a first-touch race (e.g. get_status racing
+        # consume_token for a brand-new user) can't hit the PK and raise
+        # IntegrityError. Re-read afterwards in case a concurrent caller won.
         await self._db.execute(
-            "INSERT INTO quota_buckets (user_id, tokens, last_refill_at) VALUES (?, ?, ?)",
+            "INSERT OR IGNORE INTO quota_buckets (user_id, tokens, last_refill_at) "
+            "VALUES (?, ?, ?)",
             (user_id, float(self._max_tokens), now.isoformat()),
         )
         await self._db.commit()
+        cursor = await self._db.execute(
+            "SELECT tokens, last_refill_at FROM quota_buckets WHERE user_id = ?",
+            (user_id,),
+        )
+        row = await cursor.fetchone()
+        if row:
+            return float(row["tokens"]), datetime.fromisoformat(row["last_refill_at"])
         return float(self._max_tokens), now
 
     def _refill(self, tokens: float, last_refill: datetime) -> tuple[float, datetime]:

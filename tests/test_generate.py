@@ -130,4 +130,9 @@ async def test_generate_handles_provider_failure(client: AsyncClient) -> None:
         json={"name": "fail-test", "prompt": VALID_PROMPT},
     )
     assert resp.status_code == 500
-    assert "Provider exploded" in resp.json()["detail"]["error"]
+    detail = resp.json()["detail"]
+    # The raw exception text must NOT leak to the client...
+    assert "Provider exploded" not in str(detail)
+    assert "unexpected error" in detail["error"].lower()
+    # ...but the caller gets the generation id to correlate with server-side logs.
+    assert detail["generation_id"]

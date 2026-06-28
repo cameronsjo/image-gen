@@ -132,7 +132,8 @@ class OpenRouterProvider(ImageProvider):
 
         try:
             async with asyncio.timeout(self._timeout):
-                async with httpx.AsyncClient() as http_client:
+                client_timeout = httpx.Timeout(self._timeout)
+                async with httpx.AsyncClient(timeout=client_timeout) as http_client:
                     resp = await http_client.post(
                         _OPENROUTER_IMAGE_URL,
                         json=payload,
@@ -162,6 +163,10 @@ class OpenRouterProvider(ImageProvider):
             msg = "OpenRouter response contained no image data"
             raise ProviderError(msg)
 
-        image_data = base64.b64decode(b64)
+        try:
+            image_data = base64.b64decode(b64)
+        except ValueError as e:  # binascii.Error subclasses ValueError
+            msg = "OpenRouter returned malformed base64 image data"
+            raise ProviderError(msg) from e
         logger.info("OpenRouter image generated successfully", model=self._model)
         return ProviderResult(image_data=image_data, mime_type="image/png")

@@ -165,7 +165,8 @@ class TestOpenAIProvider:
 
         assert call_kwargs["size"] == _compute_size("16:9", "1K")
         assert call_kwargs["quality"] == "low"
-        assert call_kwargs["response_format"] == "b64_json"
+        # gpt-image models reject response_format; it must not be sent.
+        assert "response_format" not in call_kwargs
 
     async def test_generate_raises_provider_error_on_sdk_failure(self):
         from image_gen.exceptions import ProviderError

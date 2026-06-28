@@ -132,8 +132,13 @@ async def list_generations(
     limit: int = 50,
     offset: int = 0,
 ) -> list[GenerationResponse]:
-    """List generation records, optionally filtered by user."""
-    if user_id:
+    """List generation records, optionally filtered by user.
+
+    ``user_id=None`` lists across all users (internal/admin use). An empty string
+    filters to that (empty) user rather than falling through to all rows — so a
+    caller that resolves to a blank identity never leaks the whole table.
+    """
+    if user_id is not None:
         cursor = await db.execute(
             "SELECT * FROM generations WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
             (user_id, limit, offset),

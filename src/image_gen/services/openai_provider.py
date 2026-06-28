@@ -2,8 +2,7 @@
 
 Maps canonical :class:`~image_gen.models.AspectRatio` / :class:`~image_gen.models.Resolution`
 values to OpenAI ``size`` and ``quality`` parameters.  GPT-image models always return
-base64-encoded PNG regardless of ``response_format``; this provider requests ``b64_json``
-explicitly to make the intent clear.
+base64-encoded PNG; ``response_format`` is not a valid parameter for them and is omitted.
 
 Param mapping
 -------------
@@ -23,9 +22,8 @@ Aspect ratio → size:
   Any ratio in :class:`~image_gen.models.AspectRatio` falls within OpenAI's supported
   1:3-3:1 range, so all canonical ratios are accepted without error.
 
-Raises :class:`~image_gen.exceptions.UnsupportedParameterError` only for values that
-fall outside the provider's hard limits (unknown ratio / resolution string, or computed
-dimensions that overflow 3840 on any axis).
+Raises :class:`~image_gen.exceptions.UnsupportedParameterError` for an unknown ratio or
+resolution string.  Dimensions are capped to 3840 per axis by construction.
 """
 
 import base64
@@ -73,8 +71,7 @@ def _compute_size(aspect_ratio: str, resolution: str) -> str:
     """Return an OpenAI-compatible ``WxH`` size string for the given params.
 
     Raises:
-        UnsupportedParameterError: If the ratio or resolution is not recognised,
-            or if the computed dimensions overflow 3840 x 2160.
+        UnsupportedParameterError: If the ratio or resolution is not recognised.
     """
     if aspect_ratio not in _RATIO_MAP:
         msg = f"OpenAI provider does not recognise aspect ratio {aspect_ratio!r}"
@@ -96,14 +93,8 @@ def _compute_size(aspect_ratio: str, resolution: str) -> str:
         width = math.floor(height * w_parts / h_parts / _DIVISOR) * _DIVISOR
         width = max(width, _DIVISOR)
 
-    if width > _MAX_DIM or height > _MAX_DIM:
-        msg = (
-            f"Computed dimensions {width}x{height} exceed OpenAI's maximum "
-            f"{_MAX_DIM}x{_MAX_DIM} for aspect_ratio={aspect_ratio!r}, "
-            f"resolution={resolution!r}"
-        )
-        raise UnsupportedParameterError(msg)
-
+    # Long edge is capped at _MAX_DIM and the short edge is always <= long edge,
+    # so both axes stay within OpenAI's limit by construction.
     return f"{width}x{height}"
 
 
@@ -129,10 +120,10 @@ class OpenAIProvider(ImageProvider):
     ) -> ProviderResult:
         """Generate an image via the OpenAI images API.
 
-        GPT-image models always return base64; we request ``b64_json`` explicitly.
-        The native SDK ``timeout`` parameter is used so a slow response raises
-        ``httpx.ReadTimeout`` (surfaced as :class:`~image_gen.exceptions.ProviderError`)
-        rather than blocking indefinitely.
+        GPT-image models always return base64, so ``response_format`` is not sent
+        (these models reject it).  The native SDK ``timeout`` parameter bounds the call;
+        a slow response raises ``httpx.ReadTimeout``, surfaced as
+        :class:`~image_gen.exceptions.ProviderError`.
         """
         size = _compute_size(aspect_ratio, resolution)
         quality, _ = _RESOLUTION_MAP[resolution]
@@ -151,7 +142,6 @@ class OpenAIProvider(ImageProvider):
                 n=1,
                 size=size,
                 quality=quality,
-                response_format="b64_json",
                 timeout=self._timeout,
             )
         except Exception as e:
@@ -166,6 +156,10 @@ class OpenAIProvider(ImageProvider):
             msg = "OpenAI response contained no image data"
             raise ProviderError(msg)
 
-        image_data = base64.b64decode(b64)
+        try:
+            image_data = base64.b64decode(b64)
+        except ValueError as e:  # binascii.Error subclasses ValueError
+            msg = "OpenAI returned malformed base64 image data"
+            raise ProviderError(msg) from e
         logger.info("OpenAI image generated successfully", model=self._model, size=size)
         return ProviderResult(image_data=image_data, mime_type="image/png")

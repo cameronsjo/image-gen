@@ -4,13 +4,18 @@ Implemented as a raw ASGI middleware (same pattern as MCPSlashRewrite) to
 avoid BaseHTTPMiddleware's response-buffering which breaks MCP SSE streaming.
 """
 
-from collections.abc import Awaitable, Callable
+import re
 from uuid import uuid4
 
 import structlog
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = structlog.get_logger()
+
+# A request-ID we are willing to echo into a response header / log context.
+# Bounds length and forbids CR/LF and other control chars so a client-supplied
+# value can't inject headers or forge log lines.
+_REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
 class RequestIDMiddleware:
@@ -32,11 +37,14 @@ class RequestIDMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Extract or generate request-ID
+        # Extract or generate request-ID. ASGI delivers header names lowercased.
         request_id: str | None = None
         for header_name, header_value in scope.get("headers", []):
-            if header_name.lower() == b"x-request-id":
-                request_id = header_value.decode("latin-1")
+            if header_name == b"x-request-id":
+                candidate = header_value.decode("latin-1")
+                # Only honor a well-formed client value; otherwise generate one.
+                if _REQUEST_ID_RE.match(candidate):
+                    request_id = candidate
                 break
         if not request_id:
             request_id = uuid4().hex
@@ -55,6 +63,3 @@ class RequestIDMiddleware:
             await self.app(scope, receive, send_with_request_id)
         finally:
             structlog.contextvars.unbind_contextvars("request_id")
-
-    # Type alias so mypy accepts the send wrapper's signature
-    _SendCallable = Callable[[Message], Awaitable[None]]
