@@ -15,9 +15,12 @@ no way to route a single request to a specific backend.
 
 Replace the hardcoded `GeminiService` with a **provider abstraction layer** consisting of:
 
-1. **`ImageProvider` ABC** (`services/provider.py`) with a single async method
-   `generate_image(prompt, aspect_ratio, resolution) -> ProviderResult`.  All providers
-   implement this contract.
+1. **`ImageProvider` ABC** (`services/provider.py`) with:
+   - `async generate_image(prompt, aspect_ratio, resolution) -> ProviderResult` — the
+     core generation contract all providers implement.
+   - `async aclose() -> None` — releases pooled network resources; default is a no-op;
+     providers that hold a long-lived client (e.g. `httpx.AsyncClient`) override it.
+     Called once per provider during lifespan teardown.
 
 2. **`ProviderResult` dataclass** — replaces `GeminiResult`; carries `image_data: bytes`
    and `mime_type: str`.
@@ -47,7 +50,10 @@ Replace the hardcoded `GeminiService` with a **provider abstraction layer** cons
 - Misconfiguration (missing key for default provider) surfaces at startup, not at
   request time.
 - `GeminiProvider` now retries on typed `genai_errors.ServerError` (not substring
-  matching) and wraps the blocking SDK call in `asyncio.timeout(settings.request_timeout_seconds)`.
+  matching) and passes a native HTTP timeout (`HttpOptions.timeout`, in milliseconds)
+  to the SDK client so a hung upstream releases its worker thread at the source.
+  `asyncio.timeout` is kept as an outer backstop bounding thread-dispatch and retry
+  book-keeping.
 - `ReadyResponse` reports available providers and the configured default instead of a
   hardcoded Gemini model name.
 
@@ -60,7 +66,10 @@ Replace the hardcoded `GeminiService` with a **provider abstraction layer** cons
   request `b64_json` explicitly for clarity. The SDK (v2.44.0) natively accepts a
   `timeout` parameter, used in preference to `asyncio.timeout` wrapping.
 - OpenRouter has no official Python SDK; `httpx.AsyncClient` is used directly with
-  bearer auth. The response shape (`data[0].b64_json`) is the same as OpenAI's.
+  bearer auth. The client is pooled for the provider's lifetime (one instance, not
+  per-request), closed via `aclose()` during lifespan teardown to release connections
+  and TLS sessions cleanly. The response shape (`data[0].b64_json`) is the same as
+  OpenAI's.
 
 ## Param Mapping
 

@@ -92,7 +92,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         yield
 
-        # Cleanup
+        # Cleanup — close pooled provider clients, then the DB. One provider's
+        # close failure must not strand the others or the DB handle.
+        logger.debug(
+            "Preparing to close providers",
+            count=len(app.state.provider_registry),
+        )
+        for name, provider in app.state.provider_registry.items():
+            try:
+                await provider.aclose()
+            except Exception as exc:
+                logger.warning("Provider close failed", provider=name, error=str(exc))
         await db.close()
         logger.info("Application stopped")
 

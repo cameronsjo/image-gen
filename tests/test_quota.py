@@ -105,6 +105,35 @@ async def test_refill_caps_at_max_tokens(db: aiosqlite.Connection, tmp_path: Pat
     assert new_tokens == 10
 
 
+async def test_lock_registry_evicts_unused_locks(db: aiosqlite.Connection, tmp_path: Path) -> None:
+    """The per-user lock registry must not grow unbounded: once no caller holds a
+    lock, the WeakValueDictionary entry is evicted."""
+    import gc
+
+    settings = _settings(tmp_path, max_tokens=5, refill_rate=0.0)
+    svc = QuotaService(db, settings)
+
+    await svc.consume_token("ephemeral-user")
+
+    # No coroutine holds the lock now; the weak registry should drop it.
+    gc.collect()
+    assert "ephemeral-user" not in svc._locks
+    assert len(svc._locks) == 0
+
+
+async def test_lock_is_shared_across_concurrent_callers(
+    db: aiosqlite.Connection, tmp_path: Path
+) -> None:
+    """Concurrent callers for one user must share a single live lock (the weak
+    registry must not hand out distinct locks while one is in use)."""
+    settings = _settings(tmp_path, max_tokens=1, refill_rate=0.0)
+    svc = QuotaService(db, settings)
+    user = "shared-lock-user"
+
+    locks = await asyncio.gather(*(svc._user_lock(user) for _ in range(8)))
+    assert all(lock is locks[0] for lock in locks)
+
+
 async def test_consume_succeeds_again_after_refill(
     db: aiosqlite.Connection, tmp_path: Path
 ) -> None:

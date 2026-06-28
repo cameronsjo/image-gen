@@ -1,6 +1,7 @@
 """Token bucket rate limiter backed by SQLite."""
 
 import asyncio
+import weakref
 from datetime import UTC, datetime
 
 import aiosqlite
@@ -31,7 +32,14 @@ class QuotaService:
         self._refill_rate = settings.quota_refill_rate
         # Per-user critical-section locks, plus a guard so two coroutines do
         # not race to create the same user's lock in the registry.
-        self._locks: dict[str, asyncio.Lock] = {}
+        #
+        # A WeakValueDictionary evicts a user's lock once no caller holds a
+        # strong reference to it — i.e. when no coroutine is mid-``consume_token``
+        # for that user — so the registry can't grow unbounded over a long-lived
+        # process. Active callers keep a strong ref (the ``lock`` local below) for
+        # the whole critical section, so a lock in use is never collected, and any
+        # concurrent caller for the same user gets that same live object.
+        self._locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
         self._locks_guard = asyncio.Lock()
 
     async def _user_lock(self, user_id: str) -> asyncio.Lock:
@@ -40,6 +48,10 @@ class QuotaService:
         Fast path: reading an existing lock is a plain dict lookup — never awaited,
         so no coroutine is preempted mid-lookup. Only first-touch creation takes the
         process-wide guard, so established users don't serialize on it on every call.
+
+        The caller MUST hold the returned lock in a local for as long as it needs
+        exclusivity: the registry keeps only a weak reference, so dropping the last
+        strong reference makes the entry eligible for eviction.
         """
         lock = self._locks.get(user_id)
         if lock is not None:

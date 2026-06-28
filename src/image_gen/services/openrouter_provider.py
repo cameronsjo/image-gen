@@ -15,32 +15,18 @@ missing image data.
 """
 
 import asyncio
-import math
 
 import httpx
 import structlog
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
+from image_gen.services._sizing import compute_size
 from image_gen.services.provider import ImageProvider, ProviderResult, decode_b64_image
 
 logger = structlog.get_logger()
 
 _OPENROUTER_IMAGE_URL = "https://openrouter.ai/api/v1/images"
-
-# Canonical aspect-ratio string → (width_parts, height_parts)
-_RATIO_MAP: dict[str, tuple[int, int]] = {
-    "1:1": (1, 1),
-    "2:3": (2, 3),
-    "3:2": (3, 2),
-    "3:4": (3, 4),
-    "4:3": (4, 3),
-    "4:5": (4, 5),
-    "5:4": (5, 4),
-    "9:16": (9, 16),
-    "16:9": (16, 9),
-    "21:9": (21, 9),
-}
 
 # Canonical resolution → (quality param, long-edge pixel target)
 _RESOLUTION_MAP: dict[str, tuple[str, int]] = {
@@ -49,9 +35,6 @@ _RESOLUTION_MAP: dict[str, tuple[str, int]] = {
     "4K": ("high", 3840),
 }
 
-_DIVISOR = 16
-_MAX_DIM = 3840
-
 
 def _compute_resolution(aspect_ratio: str, resolution: str) -> str:
     """Return a ``WxH`` size string for OpenRouter.
@@ -59,26 +42,11 @@ def _compute_resolution(aspect_ratio: str, resolution: str) -> str:
     Raises:
         UnsupportedParameterError: If the ratio or resolution is not recognised.
     """
-    if aspect_ratio not in _RATIO_MAP:
-        msg = f"OpenRouter provider does not recognise aspect ratio {aspect_ratio!r}"
-        raise UnsupportedParameterError(msg)
     if resolution not in _RESOLUTION_MAP:
         msg = f"OpenRouter provider does not recognise resolution {resolution!r}"
         raise UnsupportedParameterError(msg)
-
-    w_parts, h_parts = _RATIO_MAP[aspect_ratio]
     _, base = _RESOLUTION_MAP[resolution]
-
-    if w_parts >= h_parts:
-        width = min(base, _MAX_DIM)
-        height = math.floor(width * h_parts / w_parts / _DIVISOR) * _DIVISOR
-        height = max(height, _DIVISOR)
-    else:
-        height = min(base, _MAX_DIM)
-        width = math.floor(height * w_parts / h_parts / _DIVISOR) * _DIVISOR
-        width = max(width, _DIVISOR)
-
-    return f"{width}x{height}"
+    return compute_size(aspect_ratio, base, "OpenRouter")
 
 
 class OpenRouterProvider(ImageProvider):
@@ -90,6 +58,10 @@ class OpenRouterProvider(ImageProvider):
         self._api_key = settings.openrouter_api_key
         self._model = settings.openrouter_model
         self._timeout = settings.request_timeout_seconds
+        # Pool one client for the provider's lifetime so connections and TLS
+        # sessions are reused across requests instead of a fresh handshake per
+        # call. Closed via aclose() during application shutdown.
+        self._client = httpx.AsyncClient(timeout=httpx.Timeout(self._timeout))
 
     @property
     def model_name(self) -> str:
@@ -104,7 +76,8 @@ class OpenRouterProvider(ImageProvider):
         """Generate an image via the OpenRouter images endpoint.
 
         Non-2xx responses raise :class:`~image_gen.exceptions.ProviderError`.
-        The timeout is applied via :func:`asyncio.timeout` around the whole HTTPX call.
+        Uses the pooled :class:`httpx.AsyncClient` (its own timeout bounds the call);
+        :func:`asyncio.timeout` wraps it as an outer backstop.
         """
         size_str = _compute_resolution(aspect_ratio, resolution)
         quality, _ = _RESOLUTION_MAP[resolution]
@@ -131,13 +104,11 @@ class OpenRouterProvider(ImageProvider):
 
         try:
             async with asyncio.timeout(self._timeout):
-                client_timeout = httpx.Timeout(self._timeout)
-                async with httpx.AsyncClient(timeout=client_timeout) as http_client:
-                    resp = await http_client.post(
-                        _OPENROUTER_IMAGE_URL,
-                        json=payload,
-                        headers=headers,
-                    )
+                resp = await self._client.post(
+                    _OPENROUTER_IMAGE_URL,
+                    json=payload,
+                    headers=headers,
+                )
         except (TimeoutError, httpx.TimeoutException) as e:
             msg = f"OpenRouter request timed out after {self._timeout}s"
             raise ProviderError(msg) from e
@@ -165,3 +136,7 @@ class OpenRouterProvider(ImageProvider):
         image_data = decode_b64_image(b64, "OpenRouter")
         logger.info("OpenRouter image generated successfully", model=self._model)
         return ProviderResult(image_data=image_data, mime_type="image/png")
+
+    async def aclose(self) -> None:
+        """Close the pooled HTTP client."""
+        await self._client.aclose()
