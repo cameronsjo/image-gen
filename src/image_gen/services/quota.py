@@ -1,5 +1,6 @@
 """Token bucket rate limiter backed by SQLite."""
 
+import asyncio
 from datetime import UTC, datetime
 
 import aiosqlite
@@ -16,12 +17,31 @@ class QuotaService:
 
     Each user gets a bucket with max_tokens capacity that refills
     at refill_rate tokens per second.
+
+    The service targets a single-process deployment that shares one SQLite
+    connection. ``consume_token`` is serialized per user with an
+    :class:`asyncio.Lock` so the read -> refill -> write sequence runs as one
+    critical section; without it concurrent coroutines all observe the same
+    pre-decrement token count and over-grant (a TOCTOU race).
     """
 
     def __init__(self, db: aiosqlite.Connection, settings: Settings) -> None:
         self._db = db
         self._max_tokens = settings.quota_max_tokens
         self._refill_rate = settings.quota_refill_rate
+        # Per-user critical-section locks, plus a guard so two coroutines do
+        # not race to create the same user's lock in the registry.
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._locks_guard = asyncio.Lock()
+
+    async def _user_lock(self, user_id: str) -> asyncio.Lock:
+        """Return (creating if needed) the per-user lock under the guard."""
+        async with self._locks_guard:
+            lock = self._locks.get(user_id)
+            if lock is None:
+                lock = asyncio.Lock()
+                self._locks[user_id] = lock
+            return lock
 
     async def _get_or_create_bucket(self, user_id: str) -> tuple[float, datetime]:
         """Fetch the user's bucket, creating one at max capacity if missing."""
@@ -50,39 +70,46 @@ class QuotaService:
         return new_tokens, now
 
     async def consume_token(self, user_id: str) -> bool:
-        """Atomically check and consume one token. Returns True if successful."""
-        tokens, last_refill = await self._get_or_create_bucket(user_id)
-        tokens, now = self._refill(tokens, last_refill)
+        """Atomically check and consume one token. Returns True if successful.
 
-        if tokens < 1.0:
-            logger.warning(
-                "Quota exceeded",
-                user_id=user_id,
-                tokens=tokens,
-                max_tokens=self._max_tokens,
-            )
-            # Still update the refill timestamp
+        The entire read -> refill -> update runs inside the per-user lock so
+        concurrent callers cannot all pass the ``tokens < 1.0`` gate against a
+        stale read and over-draw the bucket.
+        """
+        lock = await self._user_lock(user_id)
+        async with lock:
+            tokens, last_refill = await self._get_or_create_bucket(user_id)
+            tokens, now = self._refill(tokens, last_refill)
+
+            if tokens < 1.0:
+                logger.warning(
+                    "Quota exceeded",
+                    user_id=user_id,
+                    tokens=tokens,
+                    max_tokens=self._max_tokens,
+                )
+                # Still persist the refill so the timestamp advances.
+                await self._db.execute(
+                    "UPDATE quota_buckets SET tokens = ?, last_refill_at = ? WHERE user_id = ?",
+                    (tokens, now.isoformat(), user_id),
+                )
+                await self._db.commit()
+                return False
+
+            tokens -= 1.0
             await self._db.execute(
                 "UPDATE quota_buckets SET tokens = ?, last_refill_at = ? WHERE user_id = ?",
                 (tokens, now.isoformat(), user_id),
             )
             await self._db.commit()
-            return False
 
-        tokens -= 1.0
-        await self._db.execute(
-            "UPDATE quota_buckets SET tokens = ?, last_refill_at = ? WHERE user_id = ?",
-            (tokens, now.isoformat(), user_id),
-        )
-        await self._db.commit()
-
-        logger.info(
-            "Quota token consumed",
-            user_id=user_id,
-            remaining=tokens,
-            max_tokens=self._max_tokens,
-        )
-        return True
+            logger.info(
+                "Quota token consumed",
+                user_id=user_id,
+                remaining=tokens,
+                max_tokens=self._max_tokens,
+            )
+            return True
 
     async def get_status(self, user_id: str) -> QuotaStatus:
         """Get current quota status for a user."""
