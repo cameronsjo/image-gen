@@ -9,10 +9,14 @@ async def test_health_returns_ok(client: AsyncClient) -> None:
     assert resp.json() == {"status": "ok"}
 
 
-async def test_ready_returns_model_info(client: AsyncClient) -> None:
+async def test_ready_returns_provider_info(client: AsyncClient) -> None:
     resp = await client.get("/ready")
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
     assert data["database"] == "connected"
-    assert "gemini" in data["gemini_model"]
+    assert "default_provider" in data
+    assert data["default_provider"] == "gemini"
+    assert "providers" in data
+    assert isinstance(data["providers"], list)
+    assert "gemini" in data["providers"]

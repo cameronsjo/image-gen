@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock
 
 from httpx import AsyncClient
 
+from image_gen.services.provider import ProviderResult
+
 VALID_PROMPT = (
     "A photorealistic image of a single red cube sitting on a clean white surface "
     "with soft studio lighting. The cube has slightly rounded edges and a matte finish. "
@@ -11,6 +13,14 @@ VALID_PROMPT = (
     "elegant composition. Light reflects subtly off the surface beneath the cube, casting "
     "a soft shadow to the right. The overall aesthetic is clean, modern, and suitable for "
     "product photography or design reference material."
+)
+
+_FAKE_PNG = (
+    b"\x89PNG\r\n\x1a\n"
+    b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02"
+    b"\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx"
+    b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
+    b"\x00\x00\x00\x00IEND\xaeB`\x82"
 )
 
 
@@ -26,6 +36,62 @@ async def test_generate_creates_image(client: AsyncClient) -> None:
     assert data["user_id"] == "anonymous"
     assert data["file_size"] is not None
     assert data["file_size"] > 0
+    assert data["provider"] == "gemini"
+
+
+async def test_generate_includes_provider_in_response(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/generate",
+        json={"name": "with-provider", "prompt": VALID_PROMPT, "provider": "gemini"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["provider"] == "gemini"
+
+
+async def test_generate_unknown_provider_returns_422(client: AsyncClient) -> None:
+    resp = await client.post(
+        "/api/generate",
+        json={"name": "bad-provider", "prompt": VALID_PROMPT, "provider": "unknown"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_generate_unconfigured_provider_returns_422(client: AsyncClient) -> None:
+    """openai / openrouter are not in the test registry (no API keys) → 422."""
+    resp = await client.post(
+        "/api/generate",
+        json={"name": "no-openai", "prompt": VALID_PROMPT, "provider": "openai"},
+    )
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert "not configured" in detail["error"]
+    assert "available_providers" in detail
+
+
+async def test_generate_per_request_provider_selection(client: AsyncClient) -> None:
+    """A mock openai provider in the registry is selected correctly."""
+    app = client._transport.app  # type: ignore[attr-defined]
+    fake_result = ProviderResult(image_data=_FAKE_PNG, mime_type="image/png")
+    mock_openai = AsyncMock(return_value=fake_result)
+
+    # Inject a mock openai provider into the registry
+    from unittest.mock import MagicMock
+
+    openai_provider = MagicMock()
+    openai_provider.name = "openai"
+    openai_provider.generate_image = mock_openai
+    app.state.provider_registry["openai"] = openai_provider
+
+    resp = await client.post(
+        "/api/generate",
+        json={"name": "openai-test", "prompt": VALID_PROMPT, "provider": "openai"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["provider"] == "openai"
+    mock_openai.assert_awaited_once()
+
+    # Cleanup
+    del app.state.provider_registry["openai"]
 
 
 async def test_generate_rejects_short_prompt(client: AsyncClient) -> None:
@@ -54,13 +120,14 @@ async def test_generate_rejects_invalid_resolution(client: AsyncClient) -> None:
     assert resp.status_code == 422
 
 
-async def test_generate_handles_gemini_failure(client: AsyncClient) -> None:
-    # Access the app through the transport to patch the live instance
+async def test_generate_handles_provider_failure(client: AsyncClient) -> None:
     app = client._transport.app  # type: ignore[attr-defined]
-    app.state.gemini.generate_image = AsyncMock(side_effect=RuntimeError("Gemini exploded"))
+    app.state.provider_registry["gemini"].generate_image = AsyncMock(
+        side_effect=RuntimeError("Provider exploded")
+    )
     resp = await client.post(
         "/api/generate",
         json={"name": "fail-test", "prompt": VALID_PROMPT},
     )
     assert resp.status_code == 500
-    assert "Gemini exploded" in resp.json()["detail"]["error"]
+    assert "Provider exploded" in resp.json()["detail"]["error"]
