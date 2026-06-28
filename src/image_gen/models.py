@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class AspectRatio(StrEnum):
-    """Supported Gemini image aspect ratios."""
+    """Supported image aspect ratios."""
 
     SQUARE = "1:1"
     PORTRAIT_2_3 = "2:3"
@@ -23,11 +23,19 @@ class AspectRatio(StrEnum):
 
 
 class Resolution(StrEnum):
-    """Supported Gemini image resolutions."""
+    """Supported image resolutions."""
 
     ONE_K = "1K"
     TWO_K = "2K"
     FOUR_K = "4K"
+
+
+class ProviderName(StrEnum):
+    """Available image generation providers."""
+
+    GEMINI = "gemini"
+    OPENAI = "openai"
+    OPENROUTER = "openrouter"
 
 
 class GenerationStatus(StrEnum):
@@ -46,6 +54,9 @@ class GenerationRequest(BaseModel):
     prompt: str = Field(min_length=1, description="Image generation prompt text")
     aspect_ratio: AspectRatio = Field(default=AspectRatio.SQUARE, description="Image aspect ratio")
     resolution: Resolution = Field(default=Resolution.TWO_K, description="Image resolution")
+    provider: ProviderName = Field(
+        default=ProviderName.GEMINI, description="Image generation provider"
+    )
 
 
 class GenerationResponse(BaseModel):
@@ -57,6 +68,7 @@ class GenerationResponse(BaseModel):
     prompt: str
     aspect_ratio: str
     resolution: str
+    provider: ProviderName = ProviderName.GEMINI
     status: GenerationStatus
     error: str | None = None
     file_path: str | None = None
@@ -88,4 +100,5 @@ class ReadyResponse(BaseModel):
 
     status: Literal["ok"] = "ok"
     database: Literal["connected"] = "connected"
-    gemini_model: str
+    default_provider: str
+    providers: list[str]
