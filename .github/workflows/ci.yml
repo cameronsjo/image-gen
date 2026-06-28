@@ -27,5 +27,8 @@ jobs:
       - name: Format check
         run: uv run ruff format --check .
 
+      - name: Type check
+        run: uv run mypy src
+
       - name: Test
-        run: uv run pytest
+        run: uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=70
