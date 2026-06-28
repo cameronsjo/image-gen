@@ -1,6 +1,10 @@
 """Tests for image browsing and download endpoints."""
 
+from unittest.mock import MagicMock
+
 from httpx import AsyncClient
+
+from image_gen.exceptions import StorageError
 
 VALID_PROMPT = (
     "A photorealistic image of a single red cube sitting on a clean white surface "
@@ -60,3 +64,17 @@ async def test_download_image_file(client: AsyncClient) -> None:
 async def test_download_nonexistent_image(client: AsyncClient) -> None:
     resp = await client.get("/api/images/nonexistent/file")
     assert resp.status_code == 404
+
+
+async def test_download_storage_error_is_404_not_leaked(client: AsyncClient) -> None:
+    """A StorageError (e.g. path containment) maps to 404 without leaking internals."""
+    created = await _create_image(client)
+    app = client._transport.app  # type: ignore[attr-defined]
+    # Force the storage layer to reject the path as if it escaped containment.
+    app.state.storage.image_exists = MagicMock(
+        side_effect=StorageError("escapes storage containment: secret detail")
+    )
+    resp = await client.get(f"/api/images/{created['id']}/file")
+    assert resp.status_code == 404
+    assert "containment" not in resp.text
+    assert "secret detail" not in resp.text
