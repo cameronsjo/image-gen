@@ -30,6 +30,7 @@ dimensions that overflow 3840 on any axis).
 
 import base64
 import math
+from typing import Literal
 
 import structlog
 from openai import AsyncOpenAI
@@ -54,8 +55,11 @@ _RATIO_MAP: dict[str, tuple[int, int]] = {
     "21:9": (21, 9),
 }
 
+# OpenAI's gpt-image quality tiers we map onto (subset of the SDK Literal).
+_OpenAIQuality = Literal["low", "medium", "high"]
+
 # Canonical resolution → (quality param, long-edge pixel target)
-_RESOLUTION_MAP: dict[str, tuple[str, int]] = {
+_RESOLUTION_MAP: dict[str, tuple[_OpenAIQuality, int]] = {
     "1K": ("low", 1024),
     "2K": ("medium", 2048),
     "4K": ("high", 3840),  # 4096 > 3840 max — cap to 3840
@@ -154,6 +158,9 @@ class OpenAIProvider(ImageProvider):
             logger.error("OpenAI API error", error=str(e))
             raise ProviderError(f"OpenAI API error: {e}") from e
 
+        if not response.data:
+            msg = "OpenAI response contained no image data"
+            raise ProviderError(msg)
         b64 = response.data[0].b64_json
         if not b64:
             msg = "OpenAI response contained no image data"

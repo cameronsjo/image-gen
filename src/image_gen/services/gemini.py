@@ -86,8 +86,8 @@ class GeminiProvider(ImageProvider):
                         config=config,
                     )
 
-                for part in response.parts:
-                    if part.inline_data is not None:
+                for part in response.parts or []:
+                    if part.inline_data is not None and part.inline_data.data is not None:
                         logger.info("Image generated successfully", model=self._model)
                         return ProviderResult(
                             image_data=part.inline_data.data,
