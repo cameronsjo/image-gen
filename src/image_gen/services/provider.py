@@ -66,3 +66,13 @@ class ImageProvider(ABC):
             :class:`image_gen.exceptions.ProviderError`: If the provider API call fails.
         """
         ...
+
+    async def aclose(self) -> None:
+        """Release any pooled network resources held by the provider.
+
+        Called once during application shutdown (lifespan teardown). The default is
+        a no-op for providers that hold no long-lived client; providers that pool a
+        connection (e.g. a shared ``httpx.AsyncClient`` or SDK client) override this
+        to close it cleanly.
+        """
+        return None

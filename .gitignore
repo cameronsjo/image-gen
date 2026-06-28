@@ -97,5 +97,8 @@ docs/_build/
 # Claude Code local settings (may contain API keys)
 .claude/settings.local.json
 
+# Claude Code subagent memory (machine-local cache, not project source)
+.claude/agent-memory/
+
 # Generated images
 output/

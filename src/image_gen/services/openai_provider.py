@@ -17,16 +17,16 @@ Resolution → quality + pixel scale:
   ============  =======  ================
 
 Aspect ratio → size:
-  Computed from the ratio numerators and the resolution base.  Width and height are
-  rounded to the nearest multiple of 16 and capped so neither exceeds 3840.
-  Any ratio in :class:`~image_gen.models.AspectRatio` falls within OpenAI's supported
-  1:3-3:1 range, so all canonical ratios are accepted without error.
+  Computed from the ratio numerators and the resolution base via the shared
+  :func:`image_gen.services._sizing.compute_size` helper.  Width and height are
+  rounded to a multiple of 16 and capped so neither exceeds 3840.  Any ratio in
+  :class:`~image_gen.models.AspectRatio` falls within OpenAI's supported 1:3-3:1
+  range, so all canonical ratios are accepted without error.
 
 Raises :class:`~image_gen.exceptions.UnsupportedParameterError` for an unknown ratio or
 resolution string.  Dimensions are capped to 3840 per axis by construction.
 """
 
-import math
 from typing import Literal
 
 import structlog
@@ -34,23 +34,10 @@ from openai import AsyncOpenAI
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
+from image_gen.services._sizing import compute_size
 from image_gen.services.provider import ImageProvider, ProviderResult, decode_b64_image
 
 logger = structlog.get_logger()
-
-# Canonical aspect-ratio string → (width_parts, height_parts)
-_RATIO_MAP: dict[str, tuple[int, int]] = {
-    "1:1": (1, 1),
-    "2:3": (2, 3),
-    "3:2": (3, 2),
-    "3:4": (3, 4),
-    "4:3": (4, 3),
-    "4:5": (4, 5),
-    "5:4": (5, 4),
-    "9:16": (9, 16),
-    "16:9": (16, 9),
-    "21:9": (21, 9),
-}
 
 # OpenAI's gpt-image quality tiers we map onto (subset of the SDK Literal).
 _OpenAIQuality = Literal["low", "medium", "high"]
@@ -62,9 +49,6 @@ _RESOLUTION_MAP: dict[str, tuple[_OpenAIQuality, int]] = {
     "4K": ("high", 3840),  # 4096 > 3840 max — cap to 3840
 }
 
-_MAX_DIM = 3840  # OpenAI max for any single dimension
-_DIVISOR = 16
-
 
 def _compute_size(aspect_ratio: str, resolution: str) -> str:
     """Return an OpenAI-compatible ``WxH`` size string for the given params.
@@ -72,29 +56,11 @@ def _compute_size(aspect_ratio: str, resolution: str) -> str:
     Raises:
         UnsupportedParameterError: If the ratio or resolution is not recognised.
     """
-    if aspect_ratio not in _RATIO_MAP:
-        msg = f"OpenAI provider does not recognise aspect ratio {aspect_ratio!r}"
-        raise UnsupportedParameterError(msg)
     if resolution not in _RESOLUTION_MAP:
         msg = f"OpenAI provider does not recognise resolution {resolution!r}"
         raise UnsupportedParameterError(msg)
-
-    w_parts, h_parts = _RATIO_MAP[aspect_ratio]
     _, base = _RESOLUTION_MAP[resolution]
-
-    # Compute pixel dimensions: scale so the long edge equals ``base``.
-    if w_parts >= h_parts:
-        width = min(base, _MAX_DIM)
-        height = math.floor(width * h_parts / w_parts / _DIVISOR) * _DIVISOR
-        height = max(height, _DIVISOR)
-    else:
-        height = min(base, _MAX_DIM)
-        width = math.floor(height * w_parts / h_parts / _DIVISOR) * _DIVISOR
-        width = max(width, _DIVISOR)
-
-    # Long edge is capped at _MAX_DIM and the short edge is always <= long edge,
-    # so both axes stay within OpenAI's limit by construction.
-    return f"{width}x{height}"
+    return compute_size(aspect_ratio, base, "OpenAI")
 
 
 class OpenAIProvider(ImageProvider):
@@ -158,3 +124,7 @@ class OpenAIProvider(ImageProvider):
         image_data = decode_b64_image(b64, "OpenAI")
         logger.info("OpenAI image generated successfully", model=self._model, size=size)
         return ProviderResult(image_data=image_data, mime_type="image/png")
+
+    async def aclose(self) -> None:
+        """Close the underlying AsyncOpenAI client."""
+        await self._client.close()

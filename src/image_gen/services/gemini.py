@@ -2,11 +2,13 @@
 
 Wraps the synchronous Google GenAI SDK in an async executor call with:
 
-- A best-effort timeout via :func:`asyncio.timeout`. This cancels the *awaiting*
-  coroutine but cannot interrupt the underlying SDK call — Python threads are not
-  killable, so a persistently hung upstream still occupies its worker thread until it
-  returns. A bounded executor or a native async client is the structural fix (tracked
-  as a follow-up); the timeout still bounds the caller's wait.
+- A native HTTP timeout passed to the SDK client (``HttpOptions.timeout``, in
+  milliseconds). This bounds the underlying request *at the source*, so a hung
+  upstream raises inside the worker thread and releases it — the structural fix for
+  the un-interruptible-thread problem (Python threads are not killable, so a bare
+  :func:`asyncio.timeout` cancels only the *awaiting* coroutine while the thread keeps
+  running). The :func:`asyncio.timeout` wrapper is kept as an outer backstop that also
+  bounds the thread-dispatch and retry book-keeping around each attempt.
 - Typed retry on :class:`google.genai.errors.ServerError` (HTTP 503 / UNAVAILABLE) with
   exponential back-off.
 - Domain errors mapped to :class:`~image_gen.exceptions.ProviderError` instead of bare
@@ -36,9 +38,15 @@ class GeminiProvider(ImageProvider):
     name = "gemini"
 
     def __init__(self, settings: Settings) -> None:
-        self._client = genai.Client(api_key=settings.google_api_key)
         self._model = settings.gemini_model
         self._timeout = settings.request_timeout_seconds
+        # Bound the underlying HTTP call at the SDK so a persistently hung upstream
+        # releases its worker thread instead of occupying it until it returns.
+        # HttpOptions.timeout is in milliseconds.
+        self._client = genai.Client(
+            api_key=settings.google_api_key,
+            http_options=types.HttpOptions(timeout=int(self._timeout * 1000)),
+        )
 
     @property
     def model_name(self) -> str:
