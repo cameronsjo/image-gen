@@ -61,12 +61,12 @@ async def get_image_file(
         raise HTTPException(status_code=404, detail="Image file not found")
 
     try:
-        if not storage.image_exists(image_id):
-            raise HTTPException(status_code=404, detail="Image file not found")
         path = storage.get_image_path(image_id)
     except StorageError as exc:
         # Never surface containment / I/O internals to the caller.
         raise HTTPException(status_code=404, detail="Image file not found") from exc
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Image file not found")
 
     return FileResponse(
         path=path,

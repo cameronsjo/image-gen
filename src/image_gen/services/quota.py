@@ -35,7 +35,15 @@ class QuotaService:
         self._locks_guard = asyncio.Lock()
 
     async def _user_lock(self, user_id: str) -> asyncio.Lock:
-        """Return (creating if needed) the per-user lock under the guard."""
+        """Return (creating if needed) the per-user lock.
+
+        Fast path: reading an existing lock is a plain dict lookup — never awaited,
+        so no coroutine is preempted mid-lookup. Only first-touch creation takes the
+        process-wide guard, so established users don't serialize on it on every call.
+        """
+        lock = self._locks.get(user_id)
+        if lock is not None:
+            return lock
         async with self._locks_guard:
             lock = self._locks.get(user_id)
             if lock is None:
@@ -69,9 +77,10 @@ class QuotaService:
             (user_id,),
         )
         row = await cursor.fetchone()
-        if row:
-            return float(row["tokens"]), datetime.fromisoformat(row["last_refill_at"])
-        return float(self._max_tokens), now
+        if row is None:  # pragma: no cover - INSERT OR IGNORE guarantees the row exists
+            msg = "quota bucket missing immediately after INSERT OR IGNORE"
+            raise RuntimeError(msg)
+        return float(row["tokens"]), datetime.fromisoformat(row["last_refill_at"])
 
     def _refill(self, tokens: float, last_refill: datetime) -> tuple[float, datetime]:
         """Calculate refilled token count based on elapsed time."""

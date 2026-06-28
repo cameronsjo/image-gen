@@ -71,7 +71,7 @@ async def test_download_storage_error_is_404_not_leaked(client: AsyncClient) -> 
     created = await _create_image(client)
     app = client._transport.app  # type: ignore[attr-defined]
     # Force the storage layer to reject the path as if it escaped containment.
-    app.state.storage.image_exists = MagicMock(
+    app.state.storage.get_image_path = MagicMock(
         side_effect=StorageError("escapes storage containment: secret detail")
     )
     resp = await client.get(f"/api/images/{created['id']}/file")

@@ -15,7 +15,6 @@ missing image data.
 """
 
 import asyncio
-import base64
 import math
 
 import httpx
@@ -23,7 +22,7 @@ import structlog
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
-from image_gen.services.provider import ImageProvider, ProviderResult
+from image_gen.services.provider import ImageProvider, ProviderResult, decode_b64_image
 
 logger = structlog.get_logger()
 
@@ -139,9 +138,9 @@ class OpenRouterProvider(ImageProvider):
                         json=payload,
                         headers=headers,
                     )
-        except TimeoutError:
+        except (TimeoutError, httpx.TimeoutException) as e:
             msg = f"OpenRouter request timed out after {self._timeout}s"
-            raise ProviderError(msg) from None
+            raise ProviderError(msg) from e
         except Exception as e:
             logger.error("OpenRouter HTTP error", error=str(e))
             raise ProviderError(f"OpenRouter HTTP error: {e}") from e
@@ -163,10 +162,6 @@ class OpenRouterProvider(ImageProvider):
             msg = "OpenRouter response contained no image data"
             raise ProviderError(msg)
 
-        try:
-            image_data = base64.b64decode(b64)
-        except ValueError as e:  # binascii.Error subclasses ValueError
-            msg = "OpenRouter returned malformed base64 image data"
-            raise ProviderError(msg) from e
+        image_data = decode_b64_image(b64, "OpenRouter")
         logger.info("OpenRouter image generated successfully", model=self._model)
         return ProviderResult(image_data=image_data, mime_type="image/png")

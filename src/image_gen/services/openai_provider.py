@@ -26,7 +26,6 @@ Raises :class:`~image_gen.exceptions.UnsupportedParameterError` for an unknown r
 resolution string.  Dimensions are capped to 3840 per axis by construction.
 """
 
-import base64
 import math
 from typing import Literal
 
@@ -35,7 +34,7 @@ from openai import AsyncOpenAI
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
-from image_gen.services.provider import ImageProvider, ProviderResult
+from image_gen.services.provider import ImageProvider, ProviderResult, decode_b64_image
 
 logger = structlog.get_logger()
 
@@ -156,10 +155,6 @@ class OpenAIProvider(ImageProvider):
             msg = "OpenAI response contained no image data"
             raise ProviderError(msg)
 
-        try:
-            image_data = base64.b64decode(b64)
-        except ValueError as e:  # binascii.Error subclasses ValueError
-            msg = "OpenAI returned malformed base64 image data"
-            raise ProviderError(msg) from e
+        image_data = decode_b64_image(b64, "OpenAI")
         logger.info("OpenAI image generated successfully", model=self._model, size=size)
         return ProviderResult(image_data=image_data, mime_type="image/png")

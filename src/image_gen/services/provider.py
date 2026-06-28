@@ -8,8 +8,11 @@ The concrete implementations live alongside this module:
 - :mod:`image_gen.services.openrouter_provider` — OpenRouter (any model)
 """
 
+import base64
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+
+from image_gen.exceptions import ProviderError
 
 
 @dataclass
@@ -18,6 +21,15 @@ class ProviderResult:
 
     image_data: bytes
     mime_type: str
+
+
+def decode_b64_image(b64: str, provider_name: str) -> bytes:
+    """Decode a base64 image payload, raising ProviderError on malformed data."""
+    try:
+        return base64.b64decode(b64)
+    except ValueError as exc:  # binascii.Error subclasses ValueError
+        msg = f"{provider_name} returned malformed base64 image data"
+        raise ProviderError(msg) from exc
 
 
 class ImageProvider(ABC):

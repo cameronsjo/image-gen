@@ -1,5 +1,6 @@
 """Tests for RequestIDMiddleware."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,14 +12,12 @@ from image_gen.config import Settings
 
 
 @pytest.fixture
-def settings(tmp_path: object) -> Settings:
+def settings(tmp_path: Path) -> Settings:
     """Test settings with auth disabled."""
-    from pathlib import Path
-
     return Settings(
         google_api_key="test-key-not-real",
         auth_enabled=False,
-        data_dir=Path(str(tmp_path)) / "data",
+        data_dir=tmp_path / "data",
         log_level="DEBUG",
     )
 

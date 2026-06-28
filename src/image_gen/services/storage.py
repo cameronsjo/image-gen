@@ -16,6 +16,8 @@ class StorageService:
     def __init__(self, settings: Settings) -> None:
         self._images_dir = settings.images_dir
         self._images_dir.mkdir(parents=True, exist_ok=True)
+        # Resolve once — the directory is fixed for the service's lifetime.
+        self._images_dir_resolved = self._images_dir.resolve()
         logger.info("Storage initialized", images_dir=str(self._images_dir))
 
     async def save_image(self, image_data: bytes, image_id: str) -> Path:
@@ -37,7 +39,7 @@ class StorageService:
         directory, defeating path-traversal ids such as ``../../etc/passwd``.
         Raises :class:`StorageError` if the id escapes containment.
         """
-        images_dir = self._images_dir.resolve()
+        images_dir = self._images_dir_resolved
         candidate = (images_dir / f"{image_id}.png").resolve()
         try:
             candidate.relative_to(images_dir)
