@@ -14,6 +14,7 @@ from image_gen.config import Settings
 from image_gen.db import engine, migrations
 from image_gen.mcp.server import create_mcp_server
 from image_gen.mcp.tools import set_app_ref
+from image_gen.middleware import RequestIDMiddleware
 from image_gen.services.gemini import GeminiService
 from image_gen.services.quota import QuotaService
 from image_gen.services.storage import StorageService
@@ -109,6 +110,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Store settings for lifespan access
     app.state.settings = settings
+
+    # Track A: request-ID middleware
+    app.add_middleware(RequestIDMiddleware)
 
     # Register routers — health is unauthenticated, API routes require auth
     app.include_router(health.router)
