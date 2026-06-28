@@ -14,8 +14,8 @@ from image_gen.config import Settings
 from image_gen.db import engine, migrations
 from image_gen.mcp.server import create_mcp_server
 from image_gen.mcp.tools import set_app_ref
-from image_gen.services.gemini import GeminiService
 from image_gen.services.quota import QuotaService
+from image_gen.services.registry import build_registry
 from image_gen.services.storage import StorageService
 
 logger = structlog.get_logger()
@@ -70,8 +70,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await migrations.run_migrations(db)
         app.state.db = db
 
-        # Initialize services
-        app.state.gemini = GeminiService(settings)
+        # Build provider registry — fails fast if default_provider not configured
+        app.state.provider_registry = build_registry(settings)
+
+        # Initialize remaining services
         app.state.storage = StorageService(settings)
         app.state.quota = QuotaService(db, settings)
 
@@ -81,7 +83,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info(
             "Application started",
             port=settings.port,
-            gemini_model=settings.gemini_model,
+            default_provider=settings.default_provider,
+            providers=sorted(app.state.provider_registry.keys()),
             data_dir=str(settings.data_dir),
             auth_enabled=settings.auth_enabled,
         )
@@ -102,7 +105,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="image-gen",
-        description="Image generation toolkit powered by Gemini 3 Pro",
+        description="Image generation toolkit powered by multiple providers",
         version="0.1.0",
         lifespan=lifespan,
     )

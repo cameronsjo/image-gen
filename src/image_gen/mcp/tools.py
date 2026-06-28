@@ -27,9 +27,16 @@ def register(mcp: FastMCP) -> None:
         resolution: Annotated[
             str, Field(default="2K", description="Image resolution: 1K, 2K, or 4K")
         ] = "2K",
+        provider: Annotated[
+            str,
+            Field(
+                default="gemini",
+                description="Image generation provider: gemini, openai, or openrouter",
+            ),
+        ] = "gemini",
         ctx: Context | None = None,
     ) -> str:
-        """Generate an image using Gemini 3 Pro.
+        """Generate an image using a configured provider.
 
         Provide a detailed prompt (minimum 50 words) describing the image you want.
         The prompt should include subject, style, lighting, composition, and any
@@ -52,10 +59,16 @@ def register(mcp: FastMCP) -> None:
             return "Service not initialized — app reference not set"
 
         app = _app_ref
-        gemini = app.state.gemini
+        registry = app.state.provider_registry
         storage = app.state.storage
         quota = app.state.quota
         db = app.state.db
+
+        # Validate provider selection
+        if provider not in registry:
+            available = ", ".join(sorted(registry.keys()))
+            return f"Unknown or unconfigured provider {provider!r}. Available: {available}"
+        selected_provider = registry[provider]
 
         # Resolve user from MCP context
         user_id = "mcp-user"
@@ -88,11 +101,12 @@ def register(mcp: FastMCP) -> None:
             prompt=prompt,
             aspect_ratio=aspect_ratio,
             resolution=resolution,
+            provider=provider,
         )
         await repository.update_generation(db, record.id, status=GenerationStatus.GENERATING)
 
         try:
-            result = await gemini.generate_image(
+            result = await selected_provider.generate_image(
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
@@ -113,6 +127,7 @@ def register(mcp: FastMCP) -> None:
                 f"Image generated successfully!\n"
                 f"ID: {record.id}\n"
                 f"Name: {name}\n"
+                f"Provider: {provider}\n"
                 f"File size: {file_size:,} bytes\n"
                 f"Path: {file_path}"
             )
