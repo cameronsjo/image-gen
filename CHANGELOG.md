@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/cameronsjo/image-gen/compare/v0.1.6...v0.1.7) (2026-06-28)
+
+
+### Bug Fixes
+
+* address multi-provider review follow-ups ([#9](https://github.com/cameronsjo/image-gen/issues/9), [#10](https://github.com/cameronsjo/image-gen/issues/10), [#11](https://github.com/cameronsjo/image-gen/issues/11), [#12](https://github.com/cameronsjo/image-gen/issues/12)) ([#16](https://github.com/cameronsjo/image-gen/issues/16)) ([a55dc61](https://github.com/cameronsjo/image-gen/commit/a55dc6186041732c586f9a649863eeb623a6305f))
+
 ## [0.1.6](https://github.com/cameronsjo/image-gen/compare/v0.1.5...v0.1.6) (2026-06-28)
 
 
