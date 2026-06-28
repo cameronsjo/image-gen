@@ -66,6 +66,69 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 - **`list_images`** — List recent generations with metadata
 - **`get_quota_status`** — Check rate limit quota
 
+## Development / Tooling
+
+### Prerequisites
+
+[uv](https://docs.astral.sh/uv/) manages the Python version and virtual environment.
+
+```bash
+uv sync          # Install all runtime + dev dependencies
+```
+
+### Linting & Formatting
+
+[Ruff](https://docs.astral.sh/ruff/) handles both linting and formatting:
+
+```bash
+uv run ruff check .          # Lint (report only)
+uv run ruff check --fix .    # Lint and auto-fix
+uv run ruff format .         # Format
+uv run ruff format --check . # Format check (CI mode)
+```
+
+### Type Checking
+
+[mypy](https://mypy.readthedocs.io/) runs in pragmatic strict mode (untyped defs disallowed, redundant casts warned, implicit optionals rejected):
+
+```bash
+uv run mypy src
+```
+
+### Tests & Coverage
+
+```bash
+uv run pytest                              # Run all tests
+uv run pytest --cov=src --cov-report=term-missing   # With coverage report
+```
+
+The CI gate requires ≥ 70% coverage across `src/`. This floor is intended to be ratcheted upward as the test suite grows.
+
+### Interactive API Docs
+
+When running locally, the OpenAPI docs are available at:
+
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+### Pre-commit Hooks
+
+Install once to run ruff, mypy, and pytest automatically before each commit:
+
+```bash
+uv run pre-commit install
+```
+
+Run against all files manually:
+
+```bash
+uv run pre-commit run --all-files
+```
+
+### Quota Notes
+
+Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `IMAGEGEN_QUOTA_REFILL_RATE` tokens/second). Quota spans all providers — there are no per-provider buckets. See `.env.example` for all configurable variables.
+
 ## License
 
 MIT
