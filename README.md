@@ -15,6 +15,51 @@ make dev
 make test
 ```
 
+## Providers / Configuration
+
+image-gen supports multiple image generation backends. Set at least one provider API key;
+the service will start only the providers whose keys are present.
+
+### Provider API Keys
+
+| Variable | Provider | Description |
+|----------|----------|-------------|
+| `IMAGEGEN_GOOGLE_API_KEY` | Gemini | Google API key for Gemini 3 Pro |
+| `IMAGEGEN_OPENAI_API_KEY` | OpenAI | OpenAI API key (gpt-image-2) |
+| `IMAGEGEN_OPENROUTER_API_KEY` | OpenRouter | OpenRouter API key |
+
+### Default Provider
+
+```bash
+IMAGEGEN_DEFAULT_PROVIDER=gemini   # gemini | openai | openrouter (default: gemini)
+```
+
+The service fails to start if `IMAGEGEN_DEFAULT_PROVIDER` names a provider whose key
+is absent.
+
+### Per-Request Provider Selection
+
+Include a `provider` field in `POST /api/generate` or the MCP `generate_image` tool:
+
+```json
+{
+  "name": "my-image",
+  "prompt": "...",
+  "provider": "openai"
+}
+```
+
+Unknown or unconfigured providers return HTTP 422 with `available_providers`.
+
+### Provider Models
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IMAGEGEN_GEMINI_MODEL` | `gemini-3-pro-image-preview` | Gemini model |
+| `IMAGEGEN_OPENAI_MODEL` | `gpt-image-2` | OpenAI image model |
+| `IMAGEGEN_OPENROUTER_MODEL` | `openai/gpt-image-2` | OpenRouter model id |
+| `IMAGEGEN_REQUEST_TIMEOUT_SECONDS` | `120.0` | Provider call timeout |
+
 ## Configuration
 
 All settings use the `IMAGEGEN_` prefix:
