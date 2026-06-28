@@ -15,12 +15,15 @@ def create_mcp_server(settings: Settings) -> FastMCP:
             issuer=settings.oidc_issuer,
             audience=settings.oidc_client_id,
         )
-        auth = OAuthProvider(
+        # FastMCP's OAuthProvider is used here as a concrete carrier whose token
+        # verification we override directly; its stricter ABC surface and the
+        # patched attribute are a known typing gap in the FastMCP auth API.
+        auth = OAuthProvider(  # type: ignore[abstract]
             base_url=settings.oidc_issuer,
             issuer_url=settings.oidc_issuer,
         )
         # Override the token verifier on the auth provider
-        auth.token_verifier = token_verifier
+        auth.token_verifier = token_verifier  # type: ignore[attr-defined]
 
         mcp = FastMCP(
             "image-gen",

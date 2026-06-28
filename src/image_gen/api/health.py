@@ -1,9 +1,8 @@
 """Health and readiness endpoints."""
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from image_gen.models import HealthResponse, ReadyResponse
-from image_gen.services.gemini import GeminiService
 
 router = APIRouter()
 
@@ -16,11 +15,18 @@ async def health() -> HealthResponse:
 
 @router.get("/ready")
 async def ready(request: Request) -> ReadyResponse:
-    """Readiness probe — verifies DB and Gemini connectivity."""
-    gemini: GeminiService = request.app.state.gemini
+    """Readiness probe — verifies DB connectivity and reports available providers."""
     db = request.app.state.db
+    registry: dict = request.app.state.provider_registry
+    settings = request.app.state.settings
 
-    # Verify DB is reachable
-    await db.execute("SELECT 1")
+    # Verify DB is reachable (fetchone ensures the query actually executes)
+    cursor = await db.execute("SELECT 1")
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=503, detail="Database check failed")
 
-    return ReadyResponse(gemini_model=gemini.model_name)
+    return ReadyResponse(
+        default_provider=settings.default_provider,
+        providers=sorted(registry.keys()),
+    )

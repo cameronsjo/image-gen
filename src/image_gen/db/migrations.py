@@ -32,8 +32,26 @@ CREATE TABLE IF NOT EXISTS quota_buckets (
 """
 
 
+async def _add_provider_column(db: aiosqlite.Connection) -> None:
+    """Idempotently add the ``provider`` column to the generations table.
+
+    Uses ``PRAGMA table_info`` to guard against re-adding an already-present
+    column, which would raise an error on SQLite.
+    """
+    cursor = await db.execute("PRAGMA table_info(generations)")
+    columns = {row[1] for row in await cursor.fetchall()}
+    if "provider" not in columns:
+        await db.execute(
+            "ALTER TABLE generations ADD COLUMN provider TEXT NOT NULL DEFAULT 'gemini'"
+        )
+        logger.info("Added provider column to generations table")
+    else:
+        logger.debug("Provider column already present, skipping migration")
+
+
 async def run_migrations(db: aiosqlite.Connection) -> None:
     """Apply all schema migrations."""
     await db.executescript(SCHEMA)
+    await _add_provider_column(db)
     await db.commit()
     logger.info("Database migrations applied")

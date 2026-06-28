@@ -31,7 +31,9 @@ async def _make_auth_client(tmp_path: Path, mock_result: GeminiResult | None = N
         app = create_app(settings)
         async with LifespanManager(app):
             if mock_result:
-                app.state.gemini.generate_image = AsyncMock(return_value=mock_result)
+                app.state.provider_registry["gemini"].generate_image = AsyncMock(
+                    return_value=mock_result
+                )
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 yield client

@@ -15,6 +15,51 @@ make dev
 make test
 ```
 
+## Providers / Configuration
+
+image-gen supports multiple image generation backends. Set at least one provider API key;
+the service will start only the providers whose keys are present.
+
+### Provider API Keys
+
+| Variable | Provider | Description |
+|----------|----------|-------------|
+| `IMAGEGEN_GOOGLE_API_KEY` | Gemini | Google API key for Gemini 3 Pro |
+| `IMAGEGEN_OPENAI_API_KEY` | OpenAI | OpenAI API key (gpt-image-2) |
+| `IMAGEGEN_OPENROUTER_API_KEY` | OpenRouter | OpenRouter API key |
+
+### Default Provider
+
+```bash
+IMAGEGEN_DEFAULT_PROVIDER=gemini   # gemini | openai | openrouter (default: gemini)
+```
+
+The service fails to start if `IMAGEGEN_DEFAULT_PROVIDER` names a provider whose key
+is absent.
+
+### Per-Request Provider Selection
+
+Include a `provider` field in `POST /api/generate` or the MCP `generate_image` tool:
+
+```json
+{
+  "name": "my-image",
+  "prompt": "...",
+  "provider": "openai"
+}
+```
+
+Unknown or unconfigured providers return HTTP 422 with `available_providers`.
+
+### Provider Models
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IMAGEGEN_GEMINI_MODEL` | `gemini-3-pro-image-preview` | Gemini model |
+| `IMAGEGEN_OPENAI_MODEL` | `gpt-image-2` | OpenAI image model |
+| `IMAGEGEN_OPENROUTER_MODEL` | `openai/gpt-image-2` | OpenRouter model id |
+| `IMAGEGEN_REQUEST_TIMEOUT_SECONDS` | `120.0` | Provider call timeout |
+
 ## Configuration
 
 All settings use the `IMAGEGEN_` prefix:
@@ -65,6 +110,69 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 - **`generate_image`** — Generate an image with Gemini 3 Pro (50+ word prompt required)
 - **`list_images`** — List recent generations with metadata
 - **`get_quota_status`** — Check rate limit quota
+
+## Development / Tooling
+
+### Prerequisites
+
+[uv](https://docs.astral.sh/uv/) manages the Python version and virtual environment.
+
+```bash
+uv sync          # Install all runtime + dev dependencies
+```
+
+### Linting & Formatting
+
+[Ruff](https://docs.astral.sh/ruff/) handles both linting and formatting:
+
+```bash
+uv run ruff check .          # Lint (report only)
+uv run ruff check --fix .    # Lint and auto-fix
+uv run ruff format .         # Format
+uv run ruff format --check . # Format check (CI mode)
+```
+
+### Type Checking
+
+[mypy](https://mypy.readthedocs.io/) runs in pragmatic strict mode (untyped defs disallowed, redundant casts warned, implicit optionals rejected):
+
+```bash
+uv run mypy src
+```
+
+### Tests & Coverage
+
+```bash
+uv run pytest                              # Run all tests
+uv run pytest --cov=src --cov-report=term-missing   # With coverage report
+```
+
+The CI gate requires ≥ 70% coverage across `src/`. This floor is intended to be ratcheted upward as the test suite grows.
+
+### Interactive API Docs
+
+When running locally, the OpenAPI docs are available at:
+
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+### Pre-commit Hooks
+
+Install once to run ruff, mypy, and pytest automatically before each commit:
+
+```bash
+uv run pre-commit install
+```
+
+Run against all files manually:
+
+```bash
+uv run pre-commit run --all-files
+```
+
+### Quota Notes
+
+Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `IMAGEGEN_QUOTA_REFILL_RATE` tokens/second). Quota spans all providers — there are no per-provider buckets. See `.env.example` for all configurable variables.
 
 ## License
 

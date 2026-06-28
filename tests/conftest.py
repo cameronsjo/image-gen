@@ -9,7 +9,10 @@ from httpx import ASGITransport, AsyncClient
 
 from image_gen.app import create_app
 from image_gen.config import Settings
-from image_gen.services.gemini import GeminiResult
+
+# Backward-compatible import alias so test files that reference GeminiResult still compile.
+from image_gen.services.gemini import GeminiResult  # noqa: F401
+from image_gen.services.provider import ProviderResult
 
 
 @pytest.fixture
@@ -30,7 +33,7 @@ def settings(tmp_data_dir: Path) -> Settings:
 
 
 @pytest.fixture
-def mock_gemini_result() -> GeminiResult:
+def mock_gemini_result() -> ProviderResult:
     """A fake 1x1 red pixel PNG for testing."""
     png_bytes = (
         b"\x89PNG\r\n\x1a\n"
@@ -39,17 +42,23 @@ def mock_gemini_result() -> GeminiResult:
         b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
         b"\x00\x00\x00\x00IEND\xaeB`\x82"
     )
-    return GeminiResult(image_data=png_bytes, mime_type="image/png")
+    return ProviderResult(image_data=png_bytes, mime_type="image/png")
 
 
 @pytest.fixture
-async def client(settings: Settings, mock_gemini_result: GeminiResult) -> AsyncClient:
-    """Create a test client with mocked Gemini SDK and full lifespan."""
+async def client(settings: Settings, mock_gemini_result: ProviderResult) -> AsyncClient:
+    """Create a test client with mocked Gemini SDK and full lifespan.
+
+    Auth is disabled (settings.auth_enabled=False).  The default provider
+    ('gemini') is mocked so POST /api/generate succeeds without real API calls.
+    """
     with patch("image_gen.services.gemini.genai.Client", return_value=MagicMock()):
         app = create_app(settings)
         async with LifespanManager(app):
-            # Patch generate_image on the live GeminiService instance
-            app.state.gemini.generate_image = AsyncMock(return_value=mock_gemini_result)
+            # Patch generate_image on the live GeminiProvider instance in the registry
+            app.state.provider_registry["gemini"].generate_image = AsyncMock(
+                return_value=mock_gemini_result
+            )
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as ac:
                 yield ac
