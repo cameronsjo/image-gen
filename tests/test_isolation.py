@@ -16,7 +16,7 @@ from httpx import ASGITransport, AsyncClient
 
 from image_gen.app import create_app
 from image_gen.config import Settings
-from image_gen.services.gemini import GeminiResult
+from image_gen.services.provider import ProviderResult
 
 VALID_PROMPT = (
     "A photorealistic image of a single red cube sitting on a clean white surface "
@@ -44,12 +44,11 @@ async def auth_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
         auth_enabled=True,
         data_dir=tmp_path / "data",
     )
-    result = GeminiResult(image_data=PNG_BYTES, mime_type="image/png")
+    result = ProviderResult(image_data=PNG_BYTES, mime_type="image/png")
     with patch("image_gen.services.gemini.genai.Client", return_value=MagicMock()):
         app = create_app(settings)
         async with LifespanManager(app):
-            # INTEGRATION: provider mock target may move to provider_registry["gemini"].
-            app.state.gemini.generate_image = AsyncMock(return_value=result)
+            app.state.provider_registry["gemini"].generate_image = AsyncMock(return_value=result)
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 yield client
