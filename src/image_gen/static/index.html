@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>image-gen</title>
+  <style>
+    :root {
+      --bg: #14161a;
+      --panel: #1c1f26;
+      --panel-2: #232732;
+      --border: #2e333f;
+      --text: #e6e8ec;
+      --muted: #9aa1ad;
+      --accent: #7aa2f7;
+      --accent-press: #5d86e8;
+      --danger: #f7768e;
+      --ok: #9ece6a;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+    header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+    header .sub { color: var(--muted); font-size: 13px; }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+    .field { margin-bottom: 14px; }
+    input[type="text"], textarea, select {
+      width: 100%;
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 11px;
+      font: inherit;
+    }
+    textarea { resize: vertical; min-height: 92px; }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    button {
+      width: 100%;
+      background: var(--accent);
+      color: #0b0d12;
+      border: 0;
+      border-radius: 8px;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { background: var(--accent-press); }
+    button:disabled { opacity: 0.6; cursor: progress; }
+
+    .notice {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .notice.error { display: block; background: rgba(247, 118, 142, 0.12); border: 1px solid var(--danger); color: var(--danger); }
+    .notice.busy { display: block; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
+
+    .result img {
+      width: 100%;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: block;
+      background: var(--panel-2);
+    }
+    .result .meta {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .result .meta strong { color: var(--text); font-weight: 600; }
+    .empty { color: var(--muted); font-size: 14px; }
+
+    h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+      gap: 8px;
+    }
+    .strip a { display: block; }
+    .strip img {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+    }
+    .strip .chip {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      aspect-ratio: 1 / 1;
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+      padding: 6px;
+    }
+    section + section { margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>image-gen</h1>
+    <span class="sub">prompt &rarr; image</span>
+  </header>
+
+  <main>
+    <div>
+      <form id="gen-form" class="panel" autocomplete="off">
+        <div class="field">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" required placeholder="e.g. sunset over the forge" />
+        </div>
+        <div class="field">
+          <label for="prompt">Prompt</label>
+          <textarea id="prompt" name="prompt" required placeholder="Describe the image you want&hellip;"></textarea>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="aspect_ratio">Aspect ratio</label>
+            <select id="aspect_ratio" name="aspect_ratio">
+              <option value="1:1" selected>1:1</option>
+              <option value="2:3">2:3</option>
+              <option value="3:2">3:2</option>
+              <option value="3:4">3:4</option>
+              <option value="4:3">4:3</option>
+              <option value="4:5">4:5</option>
+              <option value="5:4">5:4</option>
+              <option value="9:16">9:16</option>
+              <option value="16:9">16:9</option>
+              <option value="21:9">21:9</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="resolution">Resolution</label>
+            <select id="resolution" name="resolution">
+              <option value="1K">1K</option>
+              <option value="2K" selected>2K</option>
+              <option value="4K">4K</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="provider">Provider</label>
+          <select id="provider" name="provider">
+            <option value="">Loading&hellip;</option>
+          </select>
+        </div>
+        <button type="submit" id="submit-btn">Generate</button>
+        <div class="notice busy" id="busy" hidden>Generating&hellip; this can take several seconds.</div>
+        <div class="notice error" id="error" hidden></div>
+      </form>
+    </div>
+
+    <div>
+      <section class="panel">
+        <h2>Result</h2>
+        <div class="result" id="result">
+          <p class="empty">Submit a prompt to generate an image.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Recent</h2>
+        <div class="strip" id="strip">
+          <p class="empty">No images yet.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    "use strict";
+
+    const $ = (id) => document.getElementById(id);
+    const form = $("gen-form");
+    const providerEl = $("provider");
+    const submitBtn = $("submit-btn");
+    const busyEl = $("busy");
+    const errorEl = $("error");
+    const resultEl = $("result");
+    const stripEl = $("strip");
+
+    const fileUrl = (id) => `/api/images/${encodeURIComponent(id)}/file`;
+
+    function showError(status, payload) {
+      const detail = payload && typeof payload === "object" && "detail" in payload
+        ? payload.detail
+        : payload;
+      const msg = formatDetail(detail);
+      errorEl.textContent = status ? `Error ${status}: ${msg}` : msg;
+      errorEl.hidden = false;
+    }
+
+    function clearError() {
+      errorEl.hidden = true;
+      errorEl.textContent = "";
+    }
+
+    // The API returns several distinct error shapes: a plain string, FastAPI's
+    // pydantic validation array ([{loc, msg, ...}]), or a structured object
+    // (provider-not-configured, rate-limit, provider-error). Normalize all three.
+    function formatDetail(detail) {
+      if (detail == null) return "Unknown error.";
+      if (typeof detail === "string") return detail;
+      if (Array.isArray(detail)) {
+        return detail
+          .map((e) => {
+            const loc = Array.isArray(e.loc) ? e.loc.filter((p) => p !== "body").join(".") : "";
+            return loc ? `${loc}: ${e.msg}` : e.msg;
+          })
+          .join("; ");
+      }
+      if (Array.isArray(detail.validation_errors)) {
+        return detail.validation_errors.join("; ");
+      }
+      if (detail.error) {
+        let msg = detail.error;
+        if (Array.isArray(detail.available_providers) && detail.available_providers.length) {
+          msg += ` (available: ${detail.available_providers.join(", ")})`;
+        }
+        if (detail.next_token_at) {
+          msg += ` — next token at ${detail.next_token_at}`;
+        }
+        return msg;
+      }
+      return JSON.stringify(detail);
+    }
+
+    function setBusy(busy) {
+      submitBtn.disabled = busy;
+      submitBtn.textContent = busy ? "Generating…" : "Generate";
+      busyEl.hidden = !busy;
+    }
+
+    function renderResult(rec) {
+      resultEl.innerHTML = "";
+      const img = document.createElement("img");
+      img.src = fileUrl(rec.id);
+      img.alt = rec.name;
+      resultEl.appendChild(img);
+
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.innerHTML =
+        `<strong>${escapeHtml(rec.name)}</strong><br>` +
+        `${escapeHtml(rec.aspect_ratio)} · ${escapeHtml(rec.resolution)} · ${escapeHtml(rec.provider)}`;
+      resultEl.appendChild(meta);
+    }
+
+    function thumbFor(rec) {
+      if (rec.status === "completed") {
+        const a = document.createElement("a");
+        a.href = fileUrl(rec.id);
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.title = `${rec.name} · ${rec.aspect_ratio} · ${rec.resolution}`;
+        const img = document.createElement("img");
+        img.src = fileUrl(rec.id);
+        img.alt = rec.name;
+        img.loading = "lazy";
+        a.appendChild(img);
+        return a;
+      }
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.textContent = `${rec.name} (${rec.status})`;
+      return chip;
+    }
+
+    function prependThumb(rec) {
+      const empty = stripEl.querySelector(".empty");
+      if (empty) empty.remove();
+      stripEl.insertBefore(thumbFor(rec), stripEl.firstChild);
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+      );
+    }
+
+    async function loadProviders() {
+      try {
+        const resp = await fetch("/ready");
+        if (!resp.ok) throw new Error(`/ready returned ${resp.status}`);
+        const data = await resp.json();
+        const providers = Array.isArray(data.providers) ? data.providers : [];
+        providerEl.innerHTML = "";
+        if (!providers.length) {
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "No providers configured";
+          providerEl.appendChild(opt);
+          submitBtn.disabled = true;
+          showError(0, "No image providers are configured on the server.");
+          return;
+        }
+        for (const name of providers) {
+          const opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = name;
+          if (name === data.default_provider) opt.selected = true;
+          providerEl.appendChild(opt);
+        }
+      } catch (err) {
+        providerEl.innerHTML = '<option value="">Unavailable</option>';
+        showError(0, `Could not load providers: ${err.message}`);
+      }
+    }
+
+    async function loadRecent() {
+      try {
+        const resp = await fetch("/api/images?limit=12");
+        if (!resp.ok) throw new Error(`/api/images returned ${resp.status}`);
+        const records = await resp.json();
+        stripEl.innerHTML = "";
+        if (!records.length) {
+          stripEl.innerHTML = '<p class="empty">No images yet.</p>';
+          return;
+        }
+        for (const rec of records) {
+          stripEl.appendChild(thumbFor(rec));
+        }
+      } catch (err) {
+        stripEl.innerHTML = `<p class="empty">Could not load recent images: ${escapeHtml(err.message)}</p>`;
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      clearError();
+      const body = {
+        name: $("name").value.trim(),
+        prompt: $("prompt").value,
+        aspect_ratio: $("aspect_ratio").value,
+        resolution: $("resolution").value,
+        provider: providerEl.value,
+      };
+      setBusy(true);
+      try {
+        const resp = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await resp.json().catch(() => null);
+        if (resp.status === 201 && data) {
+          renderResult(data);
+          prependThumb(data);
+        } else {
+          showError(resp.status, data);
+        }
+      } catch (err) {
+        showError(0, `Request failed: ${err.message}`);
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    loadProviders();
+    loadRecent();
+  </script>
+</body>
+</html>

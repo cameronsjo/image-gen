@@ -3,9 +3,12 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import Depends, FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from image_gen.api import generate, health, images
@@ -20,6 +23,8 @@ from image_gen.services.registry import build_registry
 from image_gen.services.storage import StorageService
 
 logger = structlog.get_logger()
+
+_STATIC_DIR = Path(__file__).parent / "static"
 
 
 class MCPSlashRewrite:
@@ -131,6 +136,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(generate.router, dependencies=[Depends(get_current_user)])
     app.include_router(images.router, dependencies=[Depends(get_current_user)])
+
+    # Serve the static web UI at /ui — no auth gate (the assets carry no secrets;
+    # the API calls they make stay auth-gated in prod). html=True serves
+    # index.html at /ui/. Mounted at /ui so it can't shadow /api, /mcp, /health.
+    app.mount("/ui", StaticFiles(directory=_STATIC_DIR, html=True), name="ui")
+
+    @app.get("/", include_in_schema=False)
+    async def root() -> RedirectResponse:
+        """Send the bare host to the web UI."""
+        return RedirectResponse(url="/ui/")
 
     # Mount MCP server at /mcp — store the sub-app on state so the
     # lifespan can compose the MCP session manager lifecycle
