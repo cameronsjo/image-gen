@@ -1,407 +1,607 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>image-gen</title>
-  <style>
-    :root {
-      --bg: #14161a;
-      --panel: #1c1f26;
-      --panel-2: #232732;
-      --border: #2e333f;
-      --text: #e6e8ec;
-      --muted: #9aa1ad;
-      --accent: #7aa2f7;
-      --accent-press: #5d86e8;
-      --danger: #f7768e;
-      --ok: #9ece6a;
-      --radius: 10px;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    header {
-      padding: 20px 24px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: baseline;
-      gap: 12px;
-    }
-    header h1 { font-size: 18px; margin: 0; font-weight: 600; }
-    header .sub { color: var(--muted); font-size: 13px; }
-    main {
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 24px;
-      display: grid;
-      grid-template-columns: 360px 1fr;
-      gap: 24px;
-    }
-    @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>imagegen</title>
+<link rel="stylesheet" href="vendor/artificer/artificer.css">
+<style>
+/* ── Artificer token compat shim ──────────────────────────────────────────
+   The design referenced composite type tokens (--t-label-xs, --t-body-md…);
+   @cameronsjo/artificer@0.18.1 splits each into -size / -lh. Map them back. */
+:root{
+  --t-label-xs:var(--t-label-xs-size); --t-label-sm:var(--t-label-sm-size);
+  --t-label-md:var(--t-label-md-size); --t-body-md:var(--t-body-md-size);
+  --t-body-lg:var(--t-body-lg-size);
+}
 
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 18px;
-    }
-    label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 6px; }
-    .field { margin-bottom: 14px; }
-    input[type="text"], textarea, select {
-      width: 100%;
-      background: var(--panel-2);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 9px 11px;
-      font: inherit;
-    }
-    textarea { resize: vertical; min-height: 92px; }
-    input:focus, textarea:focus, select:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* ── Base (tool surface → mono body) ────────────────────────────────────── */
+*,*::before,*::after{ box-sizing:border-box; }
+html{ font-size:100%; }
+html,body{ margin:0; padding:0; background:var(--bg); color:var(--fg);
+  font-family:var(--font-mono); font-size:var(--t-body-md); line-height:1.6;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+.sans{ font-family:var(--font-sans); }
+.num{ font-variant-numeric:tabular-nums; }
+.note{ color:var(--fg-secondary); font-size:var(--t-label-sm); }
+.anchor{ font-weight:700; color:var(--fg); }
+h1,h2,h3,p,dl,dd{ margin:0; }
+button{ font:inherit; }
+::selection{ background:var(--accent-fill); color:var(--on-accent); }
+*{ scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+*::-webkit-scrollbar{ width:10px; height:10px; }
+*::-webkit-scrollbar-thumb{ background:var(--border); border-radius:var(--radius-sm); border:2px solid transparent; background-clip:padding-box; }
+:focus-visible{ outline:var(--focus-width) solid var(--accent); outline-offset:var(--focus-offset); border-radius:var(--radius-sm); }
 
-    button {
-      width: 100%;
-      background: var(--accent);
-      color: #0b0d12;
-      border: 0;
-      border-radius: 8px;
-      padding: 11px 14px;
-      font: inherit;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    button:hover:not(:disabled) { background: var(--accent-press); }
-    button:disabled { opacity: 0.6; cursor: progress; }
+/* ── Indeterminate progress (design markup uses --indet; npm ships --indeterminate) ── */
+.progress--indet .progress__bar{ width:40%; animation:indet 1.2s var(--ease) infinite; }
+@keyframes indet{ 0%{ margin-left:-40%; } 100%{ margin-left:100%; } }
 
-    .notice {
-      margin-top: 14px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      display: none;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .notice.error { display: block; background: rgba(247, 118, 142, 0.12); border: 1px solid var(--danger); color: var(--danger); }
-    .notice.busy { display: block; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.shell{ display:grid; grid-template-columns:460px minmax(0,1fr); min-height:calc(100vh - 56px); }
+.composer{ display:flex; flex-direction:column; gap:var(--s-md); padding:var(--s-lg);
+  border-right:1px solid var(--border); background:var(--bg); }
+.composer__head{ display:flex; align-items:center; justify-content:space-between; }
+.composer__head .lbl{ font-family:var(--font-mono); font-weight:700; font-size:var(--t-label-md); color:var(--fg); }
+.composer__head .lbl b{ color:var(--accent); }
+.prompt-field{ flex:1; min-height:0; }
+.prompt-field .textarea{ resize:vertical; min-height:240px; line-height:1.55; }
+.prompt-foot{ display:flex; justify-content:space-between; gap:var(--s-md); margin-top:6px; }
+.prompt-foot .synced{ color:var(--accent); }
+.row2{ display:grid; grid-template-columns:1fr 1fr; gap:var(--s-md); }
+.gen-wrap{ display:flex; flex-direction:column; gap:var(--s-sm); }
 
-    .result img {
-      width: 100%;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      display: block;
-      background: var(--panel-2);
-    }
-    .result .meta {
-      margin-top: 10px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .result .meta strong { color: var(--text); font-weight: 600; }
-    .empty { color: var(--muted); font-size: 14px; }
+.result{ display:flex; flex-direction:column; min-width:0; }
+.result__main{ display:flex; flex-direction:column; gap:var(--s-md); padding:var(--s-lg); min-width:0; }
+.result__head{ display:flex; align-items:center; justify-content:space-between; gap:var(--s-md); }
+.result__actions{ display:flex; gap:var(--s-sm); }
+.stage{ position:relative; aspect-ratio:16/9; background:var(--bg-inactive); border:1px solid var(--border);
+  border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.stage img{ width:100%; height:100%; object-fit:contain; display:block; background:var(--bg-inactive); }
+.stage__dim{ font-family:var(--font-mono); font-size:var(--t-label-sm); color:var(--fg-muted); letter-spacing:.06em; }
+.stage__loading{ display:flex; flex-direction:column; align-items:center; gap:var(--s-sm); color:var(--accent); }
+.stage__loading span{ font-family:var(--font-mono); font-size:var(--t-label-sm); color:var(--fg-secondary); }
+.stage__overlay{ position:absolute; left:0; right:0; bottom:0; display:flex; gap:var(--s-sm); align-items:center;
+  padding:8px 12px; background:color-mix(in oklch,var(--bg) 82%,transparent); border-top:1px solid var(--border);
+  font-family:var(--font-mono); font-size:var(--t-label-xs); color:var(--fg-secondary); }
 
-    h2 { font-size: 14px; font-weight: 600; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .strip {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-      gap: 8px;
-    }
-    .strip a { display: block; }
-    .strip img {
-      width: 100%;
-      aspect-ratio: 1 / 1;
-      object-fit: cover;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--panel-2);
-    }
-    .strip .chip {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      aspect-ratio: 1 / 1;
-      border-radius: 8px;
-      border: 1px dashed var(--border);
-      background: var(--panel-2);
-      color: var(--muted);
-      font-size: 11px;
-      text-align: center;
-      padding: 6px;
-    }
-    section + section { margin-top: 24px; }
-  </style>
+.history{ border-top:1px solid var(--border); padding:var(--s-md) var(--s-lg) var(--s-lg); background:var(--bg-raised); }
+.history__head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--s-sm); }
+.history__head .lbl{ font-family:var(--font-sans); font-size:var(--t-label-xs); letter-spacing:.1em; text-transform:uppercase; color:var(--fg-secondary); }
+.history__count{ font-family:var(--font-mono); font-size:var(--t-label-xs); color:var(--fg-secondary); }
+.hrow{ display:flex; gap:var(--s-md); align-items:center; padding:8px 6px; border-bottom:1px solid var(--border);
+  cursor:pointer; background:none; border-left:none; border-right:none; border-top:none; width:100%; text-align:left; color:inherit;
+  transition:background var(--dur-fast) var(--ease); }
+.hrow:last-child{ border-bottom:none; }
+.hrow:hover{ background:var(--bg); }
+.hrow[aria-current="true"]{ box-shadow:inset 2px 0 0 var(--accent); }
+.hrow time{ font-family:var(--font-mono); font-size:var(--t-label-xs); color:var(--fg-muted); width:64px; flex:0 0 auto; }
+.hrow .thumb{ flex:0 0 auto; width:36px; height:36px; background:var(--bg-inactive); border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
+.hrow .thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.hrow .nm{ font-family:var(--font-mono); font-size:var(--t-label-sm); color:var(--fg); flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hrow .mt{ font-family:var(--font-mono); font-size:var(--t-label-xs); color:var(--fg-secondary); flex:0 0 auto; }
+.hist-empty{ font-family:var(--font-mono); font-size:var(--t-label-sm); color:var(--fg-secondary); padding:var(--s-md) 6px; }
+
+[hidden]{ display:none !important; }
+
+@media (max-width:860px){
+  .shell{ grid-template-columns:1fr; }
+  .composer{ border-right:none; border-bottom:1px solid var(--border); }
+}
+</style>
 </head>
 <body>
-  <header>
-    <h1>image-gen</h1>
-    <span class="sub">prompt &rarr; image</span>
-  </header>
+<header class="appbar">
+  <span class="brand">imagegen<b>.</b></span>
+  <div class="appbar__actions">
+    <span class="live-tick" id="status-tick">connecting</span>
+    <span class="badge badge--ghost" id="status-host">—</span>
+    <span class="badge badge--ghost" id="status-auth">anonymous</span>
+  </div>
+</header>
 
-  <main>
-    <div>
-      <form id="gen-form" class="panel" autocomplete="off">
-        <div class="field">
-          <label for="name">Name</label>
-          <input type="text" id="name" name="name" required placeholder="e.g. sunset over the forge" />
-        </div>
-        <div class="field">
-          <label for="prompt">Prompt</label>
-          <textarea id="prompt" name="prompt" required placeholder="Describe the image you want&hellip;"></textarea>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label for="aspect_ratio">Aspect ratio</label>
-            <select id="aspect_ratio" name="aspect_ratio">
-              <option value="1:1" selected>1:1</option>
-              <option value="2:3">2:3</option>
-              <option value="3:2">3:2</option>
-              <option value="3:4">3:4</option>
-              <option value="4:3">4:3</option>
-              <option value="4:5">4:5</option>
-              <option value="5:4">5:4</option>
-              <option value="9:16">9:16</option>
-              <option value="16:9">16:9</option>
-              <option value="21:9">21:9</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="resolution">Resolution</label>
-            <select id="resolution" name="resolution">
-              <option value="1K">1K</option>
-              <option value="2K" selected>2K</option>
-              <option value="4K">4K</option>
-            </select>
-          </div>
-        </div>
-        <div class="field">
-          <label for="provider">Provider</label>
-          <select id="provider" name="provider">
-            <option value="">Loading&hellip;</option>
-          </select>
-        </div>
-        <button type="submit" id="submit-btn">Generate</button>
-        <div class="notice busy" id="busy" hidden>Generating&hellip; this can take several seconds.</div>
-        <div class="notice error" id="error" hidden></div>
-      </form>
+<main class="shell">
+  <!-- ── Composer ─────────────────────────────────────────────────────── -->
+  <form class="composer" id="composer" autocomplete="off">
+    <div class="composer__head">
+      <span class="lbl"><b>&gt;</b> compose</span>
+      <span class="num" id="head-model" style="font-family:var(--font-mono); font-size:var(--t-label-xs); color:var(--fg-muted);"></span>
     </div>
 
-    <div>
-      <section class="panel">
-        <h2>Result</h2>
-        <div class="result" id="result">
-          <p class="empty">Submit a prompt to generate an image.</p>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2>Recent</h2>
-        <div class="strip" id="strip">
-          <p class="empty">No images yet.</p>
-        </div>
-      </section>
+    <div class="field">
+      <label for="f-name">name</label>
+      <input class="input" id="f-name" type="text" placeholder="my-image-01" required>
+      <p class="err" id="err-name" hidden></p>
     </div>
-  </main>
 
-  <script>
-    "use strict";
+    <div class="field prompt-field">
+      <label for="f-prompt">prompt</label>
+      <textarea class="textarea" id="f-prompt" rows="12" placeholder="Describe the image. Supports YAML frontmatter — name / aspect_ratio / resolution keys sync to the fields." required></textarea>
+      <div class="prompt-foot note">
+        <span id="prompt-fm">no frontmatter</span>
+        <span class="num" id="prompt-count">0 chars · 0 words</span>
+      </div>
+    </div>
 
-    const $ = (id) => document.getElementById(id);
-    const form = $("gen-form");
-    const providerEl = $("provider");
-    const submitBtn = $("submit-btn");
-    const busyEl = $("busy");
-    const errorEl = $("error");
-    const resultEl = $("result");
-    const stripEl = $("strip");
+    <div class="field">
+      <label>aspect ratio</label>
+      <div id="aspect" role="group" aria-label="aspect ratio" style="display:flex; flex-wrap:wrap; gap:var(--s-sm);">
+        <button class="chip" type="button" data-val="1:1" aria-pressed="true">1:1</button>
+        <button class="chip" type="button" data-val="16:9">16:9</button>
+        <button class="chip" type="button" data-val="9:16">9:16</button>
+        <button class="chip" type="button" data-val="4:3">4:3</button>
+        <button class="chip" type="button" data-val="3:4">3:4</button>
+        <button class="chip" type="button" data-val="3:2">3:2</button>
+        <button class="chip" type="button" data-val="2:3">2:3</button>
+        <button class="chip" type="button" data-val="21:9">21:9</button>
+      </div>
+    </div>
 
-    const fileUrl = (id) => `/api/images/${encodeURIComponent(id)}/file`;
+    <div class="row2">
+      <div class="field">
+        <label for="f-provider">provider</label>
+        <select class="select" id="f-provider"></select>
+      </div>
+      <div class="field">
+        <label for="f-model">model</label>
+        <select class="select" id="f-model"></select>
+      </div>
+    </div>
 
-    function showError(status, payload) {
-      const detail = payload && typeof payload === "object" && "detail" in payload
-        ? payload.detail
-        : payload;
-      const msg = formatDetail(detail);
-      errorEl.textContent = status ? `Error ${status}: ${msg}` : msg;
-      errorEl.hidden = false;
-    }
+    <div class="field">
+      <label>resolution</label>
+      <div id="resolution" class="timerange" role="group" aria-label="resolution">
+        <button type="button" data-val="1K">1K</button>
+        <button type="button" data-val="2K" aria-pressed="true">2K</button>
+        <button type="button" data-val="4K">4K</button>
+      </div>
+    </div>
 
-    function clearError() {
-      errorEl.hidden = true;
-      errorEl.textContent = "";
-    }
+    <div class="gen-wrap">
+      <button class="btn btn--primary" id="generate" type="submit" style="width:100%;"></button>
+      <p class="note" style="margin:0;">⌘ ↵ to generate · synchronous, may take 5–20s</p>
+    </div>
+  </form>
 
-    // The API returns several distinct error shapes: a plain string, FastAPI's
-    // pydantic validation array ([{loc, msg, ...}]), or a structured object
-    // (provider-not-configured, rate-limit, provider-error). Normalize all three.
-    function formatDetail(detail) {
-      if (detail == null) return "Unknown error.";
-      if (typeof detail === "string") return detail;
-      if (Array.isArray(detail)) {
-        return detail
-          .map((e) => {
-            const loc = Array.isArray(e.loc) ? e.loc.filter((p) => p !== "body").join(".") : "";
-            return loc ? `${loc}: ${e.msg}` : e.msg;
-          })
-          .join("; ");
-      }
-      if (Array.isArray(detail.validation_errors)) {
-        return detail.validation_errors.join("; ");
-      }
-      if (detail.error) {
-        let msg = detail.error;
-        if (Array.isArray(detail.available_providers) && detail.available_providers.length) {
-          msg += ` (available: ${detail.available_providers.join(", ")})`;
-        }
-        if (detail.next_token_at) {
-          msg += ` — next token at ${detail.next_token_at}`;
-        }
-        return msg;
-      }
-      return JSON.stringify(detail);
-    }
+  <!-- ── Result + history ─────────────────────────────────────────────── -->
+  <section class="result">
+    <div class="result__main">
+      <div id="error" hidden></div>
 
-    function setBusy(busy) {
-      submitBtn.disabled = busy;
-      submitBtn.textContent = busy ? "Generating…" : "Generate";
-      busyEl.hidden = !busy;
-    }
+      <!-- empty -->
+      <div class="empty-state" id="result-empty">
+        <p class="empty-state__title">No image yet</p>
+        <p class="empty-state__body">Enter a prompt and generate. The result and its metadata appear here.</p>
+      </div>
 
-    function renderResult(rec) {
-      resultEl.innerHTML = "";
-      const img = document.createElement("img");
-      img.src = fileUrl(rec.id);
-      img.alt = rec.name;
-      resultEl.appendChild(img);
+      <!-- generating -->
+      <div id="result-loading" hidden>
+        <div class="result__head"><span class="badge badge--ghost"><span class="dot dot--accent"></span>generating</span></div>
+        <div class="stage" style="margin-top:var(--s-md);">
+          <div class="stage__loading"><span id="loading-icon"></span><span id="loading-label">generating…</span></div>
+        </div>
+        <div class="progress progress--indet" style="margin-top:var(--s-md);"><div class="progress__bar"></div></div>
+      </div>
 
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.innerHTML =
-        `<strong>${escapeHtml(rec.name)}</strong><br>` +
-        `${escapeHtml(rec.aspect_ratio)} · ${escapeHtml(rec.resolution)} · ${escapeHtml(rec.provider)}`;
-      resultEl.appendChild(meta);
-    }
+      <!-- active result -->
+      <div id="result-active" hidden style="display:flex; flex-direction:column; gap:var(--s-md);">
+        <div class="result__head">
+          <span class="badge badge--success"><span class="dot dot--success"></span>completed</span>
+          <div class="result__actions">
+            <button class="btn btn--ghost btn--sm" id="btn-download" type="button"></button>
+            <button class="btn btn--ghost btn--sm" id="btn-open" type="button"></button>
+          </div>
+        </div>
+        <div class="stage" id="result-stage">
+          <img id="result-img" alt="" hidden>
+          <span class="stage__dim" id="result-dim"></span>
+          <div class="stage__overlay" id="result-overlay" hidden></div>
+        </div>
+        <dl class="kv" id="result-meta"></dl>
+      </div>
+    </div>
 
-    function thumbFor(rec) {
-      if (rec.status === "completed") {
-        const a = document.createElement("a");
-        a.href = fileUrl(rec.id);
-        a.target = "_blank";
-        a.rel = "noopener";
-        a.title = `${rec.name} · ${rec.aspect_ratio} · ${rec.resolution}`;
-        const img = document.createElement("img");
-        img.src = fileUrl(rec.id);
-        img.alt = rec.name;
-        img.loading = "lazy";
-        a.appendChild(img);
-        return a;
-      }
-      const chip = document.createElement("div");
-      chip.className = "chip";
-      chip.textContent = `${rec.name} (${rec.status})`;
-      return chip;
-    }
+    <div class="history">
+      <div class="history__head">
+        <span class="lbl">history</span>
+        <span class="history__count" id="history-count"></span>
+      </div>
+      <div id="history-list"><div class="hist-empty">loading…</div></div>
+    </div>
+  </section>
+</main>
 
-    function prependThumb(rec) {
-      const empty = stripEl.querySelector(".empty");
-      if (empty) empty.remove();
-      stripEl.insertBefore(thumbFor(rec), stripEl.firstChild);
-    }
+<script>
+"use strict";
+(function(){
+  // ── Config ─────────────────────────────────────────────────────────────
+  var API = {
+    ready:   '/ready',
+    generate:'/api/generate',
+    images:  '/api/images',
+    file:    function(id){ return '/api/images/' + encodeURIComponent(id) + '/file'; }
+  };
+  // Optional bearer token (only used if auth is enabled on the server).
+  var TOKEN = null;
+  try { TOKEN = localStorage.getItem('imagegen.token'); } catch(e){}
 
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, (c) =>
-        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
-      );
-    }
+  // The `model` field is a PROPOSED addition to GenerationRequest. If your
+  // server rejects unknown fields, flip this to false (or add `model` to the
+  // request model + have /ready report models per provider).
+  var SEND_MODEL = true;
 
-    async function loadProviders() {
-      try {
-        const resp = await fetch("/ready");
-        if (!resp.ok) throw new Error(`/ready returned ${resp.status}`);
-        const data = await resp.json();
-        const providers = Array.isArray(data.providers) ? data.providers : [];
-        providerEl.innerHTML = "";
-        if (!providers.length) {
-          const opt = document.createElement("option");
-          opt.value = "";
-          opt.textContent = "No providers configured";
-          providerEl.appendChild(opt);
-          submitBtn.disabled = true;
-          showError(0, "No image providers are configured on the server.");
-          return;
-        }
-        for (const name of providers) {
-          const opt = document.createElement("option");
-          opt.value = name;
-          opt.textContent = name;
-          if (name === data.default_provider) opt.selected = true;
-          providerEl.appendChild(opt);
-        }
-      } catch (err) {
-        providerEl.innerHTML = '<option value="">Unavailable</option>';
-        showError(0, `Could not load providers: ${err.message}`);
-      }
-    }
+  // Fallback provider/model lists used only if /ready is unreachable or omits them.
+  var FALLBACK_PROVIDERS = ['replicate','openai','gemini','fal'];
+  var FALLBACK_MODELS = {
+    replicate:['flux-1.1-pro','flux-dev','sdxl'],
+    openai:   ['gpt-image-1','dall-e-3'],
+    gemini:   ['imagen-3.0','gemini-2.0-flash-image'],
+    fal:      ['flux-pro','recraft-v3']
+  };
+  var modelsByProvider = {}; // filled from /ready if available, else fallback
 
-    async function loadRecent() {
-      try {
-        const resp = await fetch("/api/images?limit=12");
-        if (!resp.ok) throw new Error(`/api/images returned ${resp.status}`);
-        const records = await resp.json();
-        stripEl.innerHTML = "";
-        if (!records.length) {
-          stripEl.innerHTML = '<p class="empty">No images yet.</p>';
-          return;
-        }
-        for (const rec of records) {
-          stripEl.appendChild(thumbFor(rec));
-        }
-      } catch (err) {
-        stripEl.innerHTML = `<p class="empty">Could not load recent images: ${escapeHtml(err.message)}</p>`;
-      }
-    }
+  // ── Icons (Artificer 16-grid, 1.5 stroke) ───────────────────────────────
+  var PATHS = {
+    send:'M14 2L1 8l5 2 8-8zM14 2l-6 12-2-5',
+    download:'M8 2v8M4 7l4 4 4-4M2 13h12',
+    'external-link':'M10 3h3v3M13 3l-6 6M11 9v3H4V5h3',
+    loader:'M8 1.5v2.5M8 12v2.5M3.4 3.4l1.8 1.8M10.8 10.8l1.8 1.8M1.5 8H4M12 8h2.5M3.4 12.6l1.8-1.8M10.8 5.2l1.8-1.8',
+    'refresh-cw':'M14 4v3.5h-3.5M2 12V8.5h3.5M3 6a5.5 5.5 0 0110.5-1M13 10a5.5 5.5 0 01-10.5 1'
+  };
+  function icon(name, size, cls){
+    size = size || 16;
+    var sub = PATHS[name].split(/(?=M)/g).map(function(d){ return '<path d="'+d+'"/>'; }).join('');
+    return '<svg class="icon'+(cls?' '+cls:'')+'" width="'+size+'" height="'+size+'" viewBox="0 0 16 16" fill="none" '+
+      'stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+sub+'</svg>';
+  }
 
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      clearError();
-      const body = {
-        name: $("name").value.trim(),
-        prompt: $("prompt").value,
-        aspect_ratio: $("aspect_ratio").value,
-        resolution: $("resolution").value,
-        provider: providerEl.value,
-      };
-      setBusy(true);
-      try {
-        const resp = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const data = await resp.json().catch(() => null);
-        if (resp.status === 201 && data) {
-          renderResult(data);
-          prependThumb(data);
-        } else {
-          showError(resp.status, data);
-        }
-      } catch (err) {
-        showError(0, `Request failed: ${err.message}`);
-      } finally {
-        setBusy(false);
-      }
+  // ── Element refs ─────────────────────────────────────────────────────────
+  var $ = function(id){ return document.getElementById(id); };
+  var els = {
+    form:$('composer'), name:$('f-name'), prompt:$('f-prompt'), provider:$('f-provider'),
+    model:$('f-model'), aspect:$('aspect'), resolution:$('resolution'), generate:$('generate'),
+    errName:$('err-name'), promptFm:$('prompt-fm'), promptCount:$('prompt-count'), headModel:$('head-model'),
+    statusTick:$('status-tick'), statusHost:$('status-host'), statusAuth:$('status-auth'),
+    error:$('error'), empty:$('result-empty'), loading:$('result-loading'),
+    loadingIcon:$('loading-icon'), loadingLabel:$('loading-label'),
+    active:$('result-active'), img:$('result-img'), dim:$('result-dim'), overlay:$('result-overlay'),
+    meta:$('result-meta'), btnDownload:$('btn-download'), btnOpen:$('btn-open'),
+    historyList:$('history-list'), historyCount:$('history-count')
+  };
+
+  // Static icon labels
+  els.generate.innerHTML = icon('send') + 'Generate';
+  els.btnDownload.innerHTML = icon('download') + 'download';
+  els.btnOpen.innerHTML = icon('external-link') + 'open file';
+  els.loadingIcon.innerHTML = icon('loader', 22, 'spin');
+  els.statusHost.textContent = location.host || 'localhost';
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function selected(group){ var b = group.querySelector('[aria-pressed="true"]'); return b ? b.getAttribute('data-val') : null; }
+  function pickGroup(group, val){
+    var btns = group.querySelectorAll('[data-val]'), hit=false;
+    btns.forEach(function(b){ var on = b.getAttribute('data-val')===val; b.setAttribute('aria-pressed', on?'true':'false'); if(on) hit=true; });
+    if(!hit && btns[0]) btns[0].setAttribute('aria-pressed','true');
+  }
+  function bindGroup(group){
+    group.addEventListener('click', function(e){
+      var b = e.target.closest('[data-val]'); if(!b) return;
+      group.querySelectorAll('[data-val]').forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+      b.setAttribute('aria-pressed','true');
     });
+  }
+  function ratioOf(str){ var p=(str||'1:1').split(':'); var w=parseFloat(p[0])||1, h=parseFloat(p[1])||1; return w+'/'+h; }
+  function relTime(iso){
+    if(!iso) return '';
+    var t = new Date(iso).getTime(); if(isNaN(t)) return '';
+    var s = Math.max(0,(Date.now()-t)/1000);
+    if(s<60) return Math.floor(s)+'s ago';
+    if(s<3600) return Math.floor(s/60)+'m ago';
+    if(s<86400) return Math.floor(s/3600)+'h ago';
+    if(s<604800) return Math.floor(s/86400)+'d ago';
+    return new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  }
+  function headers(){ var h={'Content-Type':'application/json'}; if(TOKEN) h.Authorization='Bearer '+TOKEN; return h; }
+  function dur(rec){
+    var ms = rec.duration_ms || rec.durationMs;
+    var s = rec.duration_s || rec.duration || rec.elapsed_s;
+    if(ms!=null) return (ms/1000).toFixed(1)+'s';
+    if(s!=null) return Number(s).toFixed(1)+'s';
+    return null;
+  }
+  function dims(rec){
+    var w = rec.width||rec.image_width||rec.w, h = rec.height||rec.image_height||rec.h;
+    return (w&&h) ? (w+' × '+h) : null;
+  }
 
-    loadProviders();
-    loadRecent();
-  </script>
+  // ── Frontmatter ──────────────────────────────────────────────────────────
+  function parseFrontmatter(text){
+    var m = text.match(/^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n?/);
+    if(!m) return { body:text, meta:{}, has:false };
+    var meta={};
+    m[1].split(/\r?\n/).forEach(function(line){
+      var i=line.indexOf(':'); if(i<0) return;
+      var k=line.slice(0,i).trim();
+      var v=line.slice(i+1).trim().replace(/^['"]|['"]$/g,'');
+      if(k) meta[k]=v;
+    });
+    return { body:text.slice(m[0].length), meta:meta, has:true };
+  }
+  function applyMeta(meta){
+    var applied=[];
+    if(meta.name){ els.name.value = meta.name; applied.push('name'); }
+    if(meta.aspect_ratio){ pickGroup(els.aspect, meta.aspect_ratio); applied.push('aspect_ratio'); }
+    if(meta.resolution){ pickGroup(els.resolution, String(meta.resolution).toUpperCase()); applied.push('resolution'); }
+    return applied;
+  }
+
+  // ── Prompt footer (count + frontmatter indicator) ────────────────────────
+  function refreshPromptFoot(){
+    var text = els.prompt.value;
+    var chars = text.length;
+    var words = (text.trim().match(/\S+/g)||[]).length;
+    els.promptCount.textContent = chars.toLocaleString()+' chars · '+words.toLocaleString()+' words';
+    var fm = parseFrontmatter(text);
+    if(fm.has){
+      var applied = applyMeta(fm.meta);
+      els.promptFm.textContent = applied.length ? ('frontmatter → '+applied.join(', ')) : 'frontmatter detected';
+      els.promptFm.classList.add('synced');
+    } else {
+      els.promptFm.textContent = 'no frontmatter';
+      els.promptFm.classList.remove('synced');
+    }
+  }
+
+  // ── Providers / models ────────────────────────────────────────────────────
+  function fillSelect(sel, items, current){
+    sel.innerHTML='';
+    items.forEach(function(it){ var o=document.createElement('option'); o.value=it; o.textContent=it; sel.appendChild(o); });
+    if(current && items.indexOf(current)>=0) sel.value=current;
+  }
+  function modelsFor(p){ return modelsByProvider[p] || FALLBACK_MODELS[p] || []; }
+  function refreshModels(keep){
+    var p = els.provider.value;
+    var list = modelsFor(p);
+    fillSelect(els.model, list, keep);
+    els.headModel.textContent = els.model.value || '';
+  }
+
+  function setStatus(state, msg){
+    els.statusTick.classList.toggle('is-off', state==='off');
+    els.statusTick.textContent = msg;
+  }
+
+  function loadReady(){
+    setStatus('connecting','connecting');
+    return fetch(API.ready, { headers: TOKEN?{Authorization:'Bearer '+TOKEN}:{} })
+      .then(function(r){ if(!r.ok) throw new Error('ready '+r.status); return r.json(); })
+      .then(function(data){
+        var providers = data.providers || data.configured_providers || FALLBACK_PROVIDERS;
+        if(!providers.length) providers = FALLBACK_PROVIDERS;
+        // models per provider, if the server reports them
+        if(data.models && typeof data.models==='object') modelsByProvider = data.models;
+        var def = data.default_provider || data.provider || providers[0];
+        fillSelect(els.provider, providers, def);
+        refreshModels();
+        setStatus('on','online');
+      })
+      .catch(function(){
+        fillSelect(els.provider, FALLBACK_PROVIDERS, FALLBACK_PROVIDERS[0]);
+        refreshModels();
+        setStatus('off','offline');
+      });
+  }
+
+  // ── History ────────────────────────────────────────────────────────────────
+  function asList(data){
+    if(Array.isArray(data)) return data;
+    return data.items || data.images || data.results || data.data || [];
+  }
+  function loadHistory(selectLatest){
+    return fetch(API.images+'?limit=12', { headers: TOKEN?{Authorization:'Bearer '+TOKEN}:{} })
+      .then(function(r){ if(!r.ok) throw new Error('images '+r.status); return r.json(); })
+      .then(function(data){ renderHistory(asList(data), selectLatest); })
+      .catch(function(){ renderHistory([], false); });
+  }
+  function renderHistory(items, selectLatest){
+    els.historyCount.textContent = items.length ? (items.length+' image'+(items.length>1?'s':'')) : '';
+    els.historyList.innerHTML='';
+    if(!items.length){
+      var e=document.createElement('div'); e.className='hist-empty'; e.textContent='No images yet.';
+      els.historyList.appendChild(e); return;
+    }
+    items.forEach(function(rec){
+      var done = (rec.status||'completed')==='completed';
+      var row=document.createElement('button'); row.type='button'; row.className='hrow'; row.setAttribute('data-id', rec.id);
+      var thumb = done ? '<span class="thumb"><img src="'+API.file(rec.id)+'" alt="" loading="lazy"></span>' : '<span class="thumb"></span>';
+      row.innerHTML =
+        '<time>'+relTime(rec.created_at||rec.createdAt||rec.created)+'</time>'+
+        thumb+
+        '<span class="nm">'+escapeHtml(rec.name||rec.id)+'</span>'+
+        '<span class="mt num">'+(rec.aspect_ratio||'')+(rec.resolution?' · '+rec.resolution:'')+'</span>';
+      row.addEventListener('click', function(){
+        if(done){ showResult(rec); markCurrent(rec.id); }
+      });
+      els.historyList.appendChild(row);
+    });
+    if(selectLatest){
+      var first = items.filter(function(r){ return (r.status||'completed')==='completed'; })[0];
+      if(first){ showResult(first); markCurrent(first.id); }
+    }
+  }
+  function markCurrent(id){
+    els.historyList.querySelectorAll('.hrow').forEach(function(r){
+      r.setAttribute('aria-current', r.getAttribute('data-id')===String(id) ? 'true':'false');
+    });
+  }
+
+  // ── Result view ─────────────────────────────────────────────────────────────
+  function setMode(mode){ // 'empty' | 'loading' | 'active'
+    els.empty.hidden   = mode!=='empty';
+    els.loading.hidden = mode!=='loading';
+    els.active.hidden  = mode!=='active';
+  }
+  function showLoading(provider, model, res){
+    clearError();
+    els.loadingLabel.textContent = 'generating · '+provider+(model?' · '+model:'')+(res?' · '+res:'');
+    setMode('loading');
+  }
+  function showResult(rec){
+    clearError();
+    var stage = els.img.closest('.stage');
+    stage.style.aspectRatio = ratioOf(rec.aspect_ratio);
+    els.img.hidden = true; els.dim.hidden = false; els.dim.textContent = 'loading…';
+    els.img.onload = function(){ els.img.hidden=false; els.dim.hidden=true; };
+    els.img.onerror = function(){ els.dim.textContent='image unavailable'; };
+    els.img.src = API.file(rec.id);
+    els.img.alt = rec.name || ('image '+rec.id);
+
+    // overlay summary
+    var ov = [rec.provider, rec.model, rec.aspect_ratio, rec.resolution].filter(Boolean).join(' · ');
+    var d = dur(rec);
+    if(ov || d){
+      els.overlay.hidden=false;
+      els.overlay.innerHTML = '<span>'+escapeHtml(ov)+'</span>'+(d?'<span style="margin-left:auto;" class="num">'+d+'</span>':'');
+    } else { els.overlay.hidden=true; }
+
+    // metadata
+    var rows=[];
+    function add(k,v){ if(v!=null && v!=='') rows.push('<dt>'+k+'</dt><dd class="num">'+escapeHtml(String(v))+'</dd>'); }
+    add('id', rec.id); add('provider', rec.provider); if(rec.model) add('model', rec.model);
+    add('resolution', rec.resolution); add('aspect', rec.aspect_ratio);
+    add('dimensions', dims(rec)); add('seed', rec.seed); add('duration', dur(rec));
+    add('created', relTime(rec.created_at||rec.createdAt||rec.created));
+    els.meta.innerHTML = rows.join('');
+
+    // actions
+    els.btnDownload.onclick = function(){
+      var a=document.createElement('a'); a.href=API.file(rec.id);
+      a.download=(rec.name||rec.id)+'.png'; document.body.appendChild(a); a.click(); a.remove();
+    };
+    els.btnOpen.onclick = function(){ window.open(API.file(rec.id), '_blank', 'noopener'); };
+
+    setMode('active');
+  }
+
+  // ── Errors ────────────────────────────────────────────────────────────────
+  function clearError(){ els.error.hidden=true; els.error.innerHTML=''; }
+  function notif(tier, title, msg, withRetry){
+    var dotCls = tier==='attention' ? 'dot--attention' : 'dot--urgent';
+    var role = tier==='attention' ? 'status' : 'alert';
+    var retry = withRetry ? '<button class="btn btn--ghost btn--sm" type="button" id="err-retry">'+icon('refresh-cw')+'retry</button>' : '';
+    els.error.innerHTML = '<div class="notif notif--'+tier+'" role="'+role+'">'+
+      '<span class="dot '+dotCls+'"></span>'+
+      '<div class="notif__body"><p class="notif__title">'+escapeHtml(title)+'</p>'+
+      (msg?'<p class="notif__msg">'+escapeHtml(msg)+'</p>':'')+'</div>'+retry+'</div>';
+    els.error.hidden=false;
+    var rb=$('err-retry'); if(rb) rb.addEventListener('click', submit);
+  }
+  function describeError(status, detail){
+    // detail may be a string, an object, or FastAPI's {detail:{...}} already unwrapped by caller
+    var d = detail || {};
+    if(status===422){
+      var avail = d.available_providers || (d.detail && d.detail.available_providers);
+      var msg = typeof d==='string' ? d : (d.message || (d.detail && d.detail.message) || 'Check the form fields.');
+      if(avail && avail.length) msg = 'Available providers: '+avail.join(', ')+'.';
+      notif('urgent','invalid request', msg, false);
+    } else if(status===429){
+      var nxt = d.next_token_at || (d.detail && d.detail.next_token_at);
+      var when = nxt ? formatWhen(nxt) : null;
+      notif('attention','rate limited', when ? ('Next token at '+when+'.') : 'Too many requests — try again shortly.', true);
+    } else if(status>=500){
+      var m5 = typeof d==='string' ? d : (d.message || (d.detail && d.detail.message) || 'The provider failed. Your inputs are kept — retry.');
+      notif('urgent','generation failed', m5, true);
+    } else {
+      var mx = typeof d==='string' ? d : (d.message || JSON.stringify(d));
+      notif('urgent','request failed ('+status+')', mx, true);
+    }
+  }
+  function formatWhen(v){
+    var t = typeof v==='number' ? v*(v<1e12?1000:1) : Date.parse(v);
+    if(isNaN(t)) return String(v);
+    return new Date(t).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
+
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  var inFlight=false;
+  function submit(e){
+    if(e && e.preventDefault) e.preventDefault();
+    if(inFlight) return;
+    clearError();
+    els.errName.hidden=true; els.name.setAttribute('aria-invalid','false'); els.prompt.setAttribute('aria-invalid','false');
+
+    var fm = parseFrontmatter(els.prompt.value);
+    if(fm.has) applyMeta(fm.meta);
+    var name = els.name.value.trim();
+    var prompt = fm.body.trim();
+
+    if(!name){ els.errName.textContent='Name is required.'; els.errName.hidden=false; els.name.setAttribute('aria-invalid','true'); els.name.focus(); return; }
+    if(!prompt){ els.prompt.setAttribute('aria-invalid','true'); notif('urgent','prompt is empty','Add a description (frontmatter alone is not a prompt).',false); els.prompt.focus(); return; }
+
+    var body = {
+      name: name,
+      prompt: prompt,
+      aspect_ratio: selected(els.aspect),
+      resolution: selected(els.resolution),
+      provider: els.provider.value
+    };
+    if(SEND_MODEL && els.model.value) body.model = els.model.value;
+
+    inFlight=true;
+    els.generate.disabled=true;
+    els.generate.innerHTML = icon('loader',16,'spin')+'Generating…';
+    showLoading(body.provider, body.model, body.resolution);
+
+    fetch(API.generate, { method:'POST', headers:headers(), body:JSON.stringify(body) })
+      .then(function(r){
+        return r.json().then(function(j){ return {ok:r.ok, status:r.status, json:j}; })
+          .catch(function(){ return {ok:r.ok, status:r.status, json:null}; });
+      })
+      .then(function(res){
+        if(res.ok){
+          var rec = res.json;
+          // ensure the model selection is reflected even if the server doesn't echo it
+          if(SEND_MODEL && !rec.model && body.model) rec.model = body.model;
+          showResult(rec);
+          loadHistory(false).then(function(){ markCurrent(rec.id); });
+        } else {
+          var detail = res.json ? (res.json.detail!=null ? res.json.detail : res.json) : null;
+          describeError(res.status, detail);
+          // return to whatever was on screen before (empty if nothing yet)
+          setMode(els.active.dataset.has ? 'active' : 'empty');
+        }
+      })
+      .catch(function(){
+        notif('urgent','network error','Could not reach the server. Check it is running, then retry.', true);
+        setMode(els.active.dataset.has ? 'active' : 'empty');
+      })
+      .finally(function(){
+        inFlight=false;
+        els.generate.disabled=false;
+        els.generate.innerHTML = icon('send')+'Generate';
+      });
+  }
+
+  // mark when an active result exists (so errors fall back correctly)
+  var _origShow = showResult;
+  showResult = function(rec){ _origShow(rec); els.active.dataset.has='1'; };
+
+  // ── Wire up ──────────────────────────────────────────────────────────────
+  bindGroup(els.aspect); bindGroup(els.resolution);
+  els.prompt.addEventListener('input', refreshPromptFoot);
+  els.provider.addEventListener('change', function(){ refreshModels(); });
+  els.model.addEventListener('change', function(){ els.headModel.textContent = els.model.value||''; });
+  els.form.addEventListener('submit', submit);
+  // ⌘/Ctrl + Enter from the prompt
+  els.prompt.addEventListener('keydown', function(e){ if((e.metaKey||e.ctrlKey) && e.key==='Enter'){ submit(e); } });
+
+  refreshPromptFoot();
+  loadReady();
+  loadHistory(true);
+})();
+</script>
 </body>
 </html>

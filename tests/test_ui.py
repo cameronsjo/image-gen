@@ -20,3 +20,11 @@ async def test_root_redirects_to_ui(client: AsyncClient) -> None:
     resp = await client.get("/")
     assert resp.status_code == 307
     assert resp.headers["location"] == "/ui/"
+
+
+async def test_vendored_artificer_css_is_served(client: AsyncClient) -> None:
+    # The page links the vendored npm design system (@cameronsjo/artificer);
+    # guard that the asset ships and the mount serves it with a CSS type.
+    resp = await client.get("/ui/vendor/artificer/artificer.css")
+    assert resp.status_code == 200
+    assert "text/css" in resp.headers["content-type"]
