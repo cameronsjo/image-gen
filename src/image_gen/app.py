@@ -19,12 +19,16 @@ from image_gen.mcp.server import create_mcp_server
 from image_gen.mcp.tools import set_app_ref
 from image_gen.middleware import RequestIDMiddleware
 from image_gen.services.quota import QuotaService
-from image_gen.services.registry import build_registry
+from image_gen.services.registry import build_registry, discover_models
 from image_gen.services.storage import StorageService
 
 logger = structlog.get_logger()
 
 _STATIC_DIR = Path(__file__).parent / "static"
+
+# Per-provider bound on the startup list-models call.  Discovery is best-effort and
+# must never stall boot, so it stays well under the (longer) generation timeout.
+_MODEL_DISCOVERY_TIMEOUT = 10.0
 
 
 class MCPSlashRewrite:
@@ -78,6 +82,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         # Build provider registry — fails fast if default_provider not configured
         app.state.provider_registry = build_registry(settings)
+
+        # Discover each provider's image models once at startup (best-effort, bounded).
+        # A down list-API degrades to [default] and never blocks boot.
+        try:
+            app.state.provider_models = await discover_models(
+                app.state.provider_registry, timeout=_MODEL_DISCOVERY_TIMEOUT
+            )
+        except Exception as exc:  # defensive — discovery must never block startup
+            logger.warning("Model discovery failed entirely", error=str(exc))
+            app.state.provider_models = {}
 
         # Initialize remaining services
         app.state.storage = StorageService(settings)

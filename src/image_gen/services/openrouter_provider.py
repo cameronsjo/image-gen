@@ -22,11 +22,18 @@ import structlog
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
 from image_gen.services._sizing import compute_size
-from image_gen.services.provider import ImageProvider, ProviderResult, decode_b64_image
+from image_gen.services.provider import (
+    ImageProvider,
+    ProviderResult,
+    decode_b64_image,
+    models_with_default,
+)
 
 logger = structlog.get_logger()
 
 _OPENROUTER_IMAGE_URL = "https://openrouter.ai/api/v1/images"
+# Public, unauthenticated catalogue of every model OpenRouter routes to.
+_OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
 # Canonical resolution → (quality param, long-edge pixel target)
 _RESOLUTION_MAP: dict[str, tuple[str, int]] = {
@@ -72,6 +79,7 @@ class OpenRouterProvider(ImageProvider):
         prompt: str,
         aspect_ratio: str = "1:1",
         resolution: str = "2K",
+        model: str | None = None,
     ) -> ProviderResult:
         """Generate an image via the OpenRouter images endpoint.
 
@@ -79,11 +87,12 @@ class OpenRouterProvider(ImageProvider):
         Uses the pooled :class:`httpx.AsyncClient` (its own timeout bounds the call);
         :func:`asyncio.timeout` wraps it as an outer backstop.
         """
+        model = model or self._model
         size_str = _compute_resolution(aspect_ratio, resolution)
         quality, _ = _RESOLUTION_MAP[resolution]
 
         payload = {
-            "model": self._model,
+            "model": model,
             "prompt": prompt,
             "n": 1,
             "resolution": size_str,
@@ -97,7 +106,7 @@ class OpenRouterProvider(ImageProvider):
 
         logger.info(
             "Calling OpenRouter images API",
-            model=self._model,
+            model=model,
             resolution=size_str,
             quality=quality,
         )
@@ -134,8 +143,31 @@ class OpenRouterProvider(ImageProvider):
             raise ProviderError(msg)
 
         image_data = decode_b64_image(b64, "OpenRouter")
-        logger.info("OpenRouter image generated successfully", model=self._model)
+        logger.info("OpenRouter image generated successfully", model=model)
         return ProviderResult(image_data=image_data, mime_type="image/png")
+
+    async def list_models(self) -> list[str]:
+        """Discover OpenRouter image models from the public models catalogue.
+
+        Keeps entries whose ``architecture.output_modalities`` contains ``"image"``.
+        Uses the pooled client (no auth needed for the public endpoint); any failure
+        degrades to the configured default.
+        """
+        try:
+            resp = await self._client.get(_OPENROUTER_MODELS_URL)
+            if resp.status_code >= 400:
+                msg = f"OpenRouter models endpoint returned HTTP {resp.status_code}"
+                raise ProviderError(msg)
+            data = resp.json()
+            discovered = [
+                entry["id"]
+                for entry in data.get("data", [])
+                if "image" in ((entry.get("architecture") or {}).get("output_modalities") or [])
+            ]
+        except Exception as exc:
+            logger.warning("OpenRouter model discovery failed", error=str(exc))
+            discovered = []
+        return models_with_default(self._model, discovered)
 
     async def aclose(self) -> None:
         """Close the pooled HTTP client."""

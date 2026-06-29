@@ -13,9 +13,10 @@ logger = structlog.get_logger()
 
 def _row_to_response(row: aiosqlite.Row) -> GenerationResponse:
     """Convert a database row to a GenerationResponse."""
-    # Defensive: provider column may be absent on pre-migration databases.
+    # Defensive: provider/model columns may be absent on pre-migration databases.
     # sqlite3.Row.__contains__ checks values, not keys — use .keys() explicitly.
     provider_val = row["provider"] if "provider" in row.keys() else "gemini"  # noqa: SIM118
+    model_val = row["model"] if "model" in row.keys() else None  # noqa: SIM118
 
     return GenerationResponse(
         id=row["id"],
@@ -25,6 +26,7 @@ def _row_to_response(row: aiosqlite.Row) -> GenerationResponse:
         aspect_ratio=row["aspect_ratio"],
         resolution=row["resolution"],
         provider=ProviderName(provider_val),
+        model=model_val,
         status=GenerationStatus(row["status"]),
         error=row["error"],
         file_path=row["file_path"],
@@ -43,6 +45,7 @@ async def create_generation(
     aspect_ratio: str,
     resolution: str,
     provider: str = "gemini",
+    model: str | None = None,
 ) -> GenerationResponse:
     """Insert a new generation record and return it."""
     generation_id = str(ULID())
@@ -51,10 +54,22 @@ async def create_generation(
     await db.execute(
         """
         INSERT INTO generations
-            (id, user_id, name, prompt, aspect_ratio, resolution, status, provider, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, name, prompt, aspect_ratio, resolution, status, provider, model,
+             created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (generation_id, user_id, name, prompt, aspect_ratio, resolution, "pending", provider, now),
+        (
+            generation_id,
+            user_id,
+            name,
+            prompt,
+            aspect_ratio,
+            resolution,
+            "pending",
+            provider,
+            model,
+            now,
+        ),
     )
     await db.commit()
 
@@ -64,6 +79,7 @@ async def create_generation(
         user_id=user_id,
         name=name,
         provider=provider,
+        model=model,
     )
 
     return GenerationResponse(
@@ -74,6 +90,7 @@ async def create_generation(
         aspect_ratio=aspect_ratio,
         resolution=resolution,
         provider=ProviderName(provider),
+        model=model,
         status=GenerationStatus.PENDING,
         created_at=datetime.fromisoformat(now),
     )

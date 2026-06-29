@@ -7,6 +7,8 @@ resulting registry the service fails fast with :class:`ProviderNotConfiguredErro
 so the operator knows immediately rather than discovering it at request time.
 """
 
+import asyncio
+
 import structlog
 
 from image_gen.config import Settings
@@ -53,3 +55,35 @@ def build_registry(settings: Settings) -> dict[str, ImageProvider]:
         raise ProviderNotConfiguredError(msg)
 
     return registry
+
+
+async def discover_models(
+    registry: dict[str, ImageProvider],
+    timeout: float,
+) -> dict[str, list[str]]:
+    """Discover each provider's available image models, best-effort and concurrently.
+
+    Each provider's :meth:`~image_gen.services.provider.ImageProvider.list_models`
+    is bounded by its own *timeout* and run concurrently, so boot waits at most one
+    timeout rather than the sum across providers.  On error or timeout the provider
+    degrades to ``[model_name]`` so a down list-API never blocks startup or removes
+    the working default.  Pure orchestration — keeps the lifespan in ``app.py`` lean.
+
+    Returns:
+        Mapping of provider name → ordered model ids (configured default first).
+    """
+
+    async def _discover_one(name: str, provider: ImageProvider) -> tuple[str, list[str]]:
+        try:
+            async with asyncio.timeout(timeout):
+                models = await provider.list_models()
+        except Exception as exc:
+            logger.warning("Model discovery failed", provider=name, error=str(exc))
+            return name, [provider.model_name]
+        logger.debug("Discovered models", provider=name, count=len(models))
+        return name, models
+
+    results = await asyncio.gather(
+        *(_discover_one(name, provider) for name, provider in registry.items())
+    )
+    return dict(results)

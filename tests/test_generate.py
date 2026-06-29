@@ -79,6 +79,7 @@ async def test_generate_per_request_provider_selection(client: AsyncClient) -> N
 
     openai_provider = MagicMock()
     openai_provider.name = "openai"
+    openai_provider.model_name = "openai/gpt-image-2"
     openai_provider.generate_image = mock_openai
     app.state.provider_registry["openai"] = openai_provider
 
@@ -92,6 +93,46 @@ async def test_generate_per_request_provider_selection(client: AsyncClient) -> N
 
     # Cleanup
     del app.state.provider_registry["openai"]
+
+
+async def test_generate_defaults_model_to_provider_default(client: AsyncClient) -> None:
+    """Omitting model uses the provider default — persisted and echoed back.
+
+    The response is re-read from the DB (get_generation), so the echoed model
+    also proves the value round-tripped through the new column.
+    """
+    resp = await client.post(
+        "/api/generate",
+        json={"name": "default-model", "prompt": VALID_PROMPT},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["model"] == "gemini-3-pro-image-preview"
+
+
+async def test_generate_echoes_explicit_model(client: AsyncClient) -> None:
+    """A model in the provider's discovered list is accepted and echoed."""
+    resp = await client.post(
+        "/api/generate",
+        json={
+            "name": "explicit-model",
+            "prompt": VALID_PROMPT,
+            "model": "gemini-3-pro-image-preview",
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["model"] == "gemini-3-pro-image-preview"
+
+
+async def test_generate_unknown_model_returns_422(client: AsyncClient) -> None:
+    """A model absent from the provider's non-empty list → 422 + available_models."""
+    resp = await client.post(
+        "/api/generate",
+        json={"name": "bad-model", "prompt": VALID_PROMPT, "model": "made-up-model-xyz"},
+    )
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert "available_models" in detail
+    assert "gemini-3-pro-image-preview" in detail["available_models"]
 
 
 async def test_generate_rejects_short_prompt(client: AsyncClient) -> None:

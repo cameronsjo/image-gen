@@ -47,6 +47,22 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
         )
     provider: ImageProvider = registry[provider_name]
 
+    # Resolve and validate model selection.  Omitted → the provider's configured
+    # default.  An explicit model is rejected only when discovery produced a
+    # non-empty list that excludes it (mirrors the provider-not-configured 422);
+    # an empty list means discovery degraded, so we trust the caller rather than
+    # block a model the provider may still serve.
+    available_models: list[str] = request.app.state.provider_models.get(provider_name, [])
+    model = body.model or provider.model_name
+    if body.model and available_models and body.model not in available_models:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": f"Model {body.model!r} is not available for provider {provider_name!r}",
+                "available_models": available_models,
+            },
+        )
+
     # Pre-flight validation (cost boundary: Expensive tier)
     parsed = ParsedPrompt(
         name=body.name,
@@ -79,6 +95,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
         aspect_ratio=body.aspect_ratio.value,
         resolution=body.resolution.value,
         provider=provider_name,
+        model=model,
     )
 
     # Update to generating status
@@ -89,6 +106,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             prompt=body.prompt,
             aspect_ratio=body.aspect_ratio.value,
             resolution=body.resolution.value,
+            model=model,
         )
 
         file_path = await storage.save_image(result.image_data, record.id)

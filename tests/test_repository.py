@@ -14,7 +14,7 @@ import aiosqlite
 import pytest
 
 from image_gen.db import engine, migrations, repository
-from image_gen.models import GenerationStatus
+from image_gen.models import GenerationStatus, ProviderName
 
 
 @pytest.fixture
@@ -227,6 +227,89 @@ async def test_list_generations_filters_by_user_id(db: aiosqlite.Connection) -> 
 async def test_list_generations_empty_for_unknown_user(db: aiosqlite.Connection) -> None:
     results = await repository.list_generations(db, user_id="nobody")
     assert results == []
+
+
+# ── model column / migration ────────────────────────────────────────────────
+
+
+async def test_create_generation_persists_model(db: aiosqlite.Connection) -> None:
+    record = await repository.create_generation(
+        db,
+        user_id="user-m",
+        name="modelled",
+        prompt="A teapot",
+        aspect_ratio="1:1",
+        resolution="2K",
+        provider="openai",
+        model="gpt-image-2",
+    )
+    assert record.model == "gpt-image-2"
+
+    fetched = await repository.get_generation(db, record.id)
+    assert fetched is not None
+    assert fetched.model == "gpt-image-2"
+
+
+async def test_create_generation_model_defaults_to_none(db: aiosqlite.Connection) -> None:
+    record = await repository.create_generation(
+        db,
+        user_id="user-n",
+        name="no-model",
+        prompt="A kettle",
+        aspect_ratio="1:1",
+        resolution="2K",
+    )
+    assert record.model is None
+
+
+async def test_migrations_are_idempotent(tmp_path: Path) -> None:
+    """Running migrations twice must not raise — the model column guard holds."""
+    conn = await engine.connect(tmp_path / "idempotent.db")
+    await migrations.run_migrations(conn)
+    await migrations.run_migrations(conn)  # second run must be a no-op
+
+    cursor = await conn.execute("PRAGMA table_info(generations)")
+    columns = {row[1] for row in await cursor.fetchall()}
+    assert "model" in columns
+    await conn.close()
+
+
+async def test_pre_migration_row_reads_model_none(tmp_path: Path) -> None:
+    """A row written before the model column existed reads back as model=None."""
+    conn = await engine.connect(tmp_path / "legacy.db")
+    # Legacy schema: no provider/model columns.
+    await conn.execute(
+        """
+        CREATE TABLE generations (
+            id          TEXT PRIMARY KEY,
+            user_id     TEXT NOT NULL,
+            name        TEXT NOT NULL,
+            prompt      TEXT NOT NULL,
+            aspect_ratio TEXT NOT NULL DEFAULT '1:1',
+            resolution  TEXT NOT NULL DEFAULT '2K',
+            status      TEXT NOT NULL DEFAULT 'pending',
+            error       TEXT,
+            file_path   TEXT,
+            file_size   INTEGER,
+            created_at  TEXT NOT NULL,
+            completed_at TEXT
+        )
+        """
+    )
+    await conn.execute(
+        "INSERT INTO generations (id, user_id, name, prompt, created_at) VALUES (?, ?, ?, ?, ?)",
+        ("01LEGACYROW0000000000000000", "u", "legacy", "old prompt", datetime.now(UTC).isoformat()),
+    )
+    await conn.commit()
+
+    # Migrate forward — adds provider (NOT NULL DEFAULT 'gemini') and model (nullable).
+    await migrations.run_migrations(conn)
+
+    fetched = await repository.get_generation(conn, "01LEGACYROW0000000000000000")
+    assert fetched is not None
+    assert fetched.model is None
+    assert fetched.provider == ProviderName.GEMINI
+    await conn.close()
 
 
 async def test_list_generations_ordered_by_created_at_desc(db: aiosqlite.Connection) -> None:

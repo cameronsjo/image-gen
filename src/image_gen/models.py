@@ -57,6 +57,10 @@ class GenerationRequest(BaseModel):
     provider: ProviderName = Field(
         default=ProviderName.GEMINI, description="Image generation provider"
     )
+    model: str | None = Field(
+        default=None,
+        description="Provider model identifier; omit to use the provider's configured default",
+    )
 
 
 class GenerationResponse(BaseModel):
@@ -69,6 +73,7 @@ class GenerationResponse(BaseModel):
     aspect_ratio: str
     resolution: str
     provider: ProviderName = ProviderName.GEMINI
+    model: str | None = None
     status: GenerationStatus
     error: str | None = None
     file_path: str | None = None
@@ -102,3 +107,7 @@ class ReadyResponse(BaseModel):
     database: Literal["connected"] = "connected"
     default_provider: str
     providers: list[str]
+    models: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Discovered image models per provider (configured default first)",
+    )

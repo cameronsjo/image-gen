@@ -27,6 +27,7 @@ Raises :class:`~image_gen.exceptions.UnsupportedParameterError` for an unknown r
 resolution string.  Dimensions are capped to 3840 per axis by construction.
 """
 
+import re
 from typing import Literal
 
 import structlog
@@ -35,9 +36,18 @@ from openai import AsyncOpenAI
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
 from image_gen.services._sizing import compute_size
-from image_gen.services.provider import ImageProvider, ProviderResult, decode_b64_image
+from image_gen.services.provider import (
+    ImageProvider,
+    ProviderResult,
+    decode_b64_image,
+    models_with_default,
+)
 
 logger = structlog.get_logger()
+
+# OpenAI's models.list() exposes no capability field, so image models are
+# identified by id prefix (gpt-image-*, dall-e-*).
+_IMAGE_MODEL_RE = re.compile(r"^(gpt-image|dall-e)")
 
 # OpenAI's gpt-image quality tiers we map onto (subset of the SDK Literal).
 _OpenAIQuality = Literal["low", "medium", "high"]
@@ -82,6 +92,7 @@ class OpenAIProvider(ImageProvider):
         prompt: str,
         aspect_ratio: str = "1:1",
         resolution: str = "2K",
+        model: str | None = None,
     ) -> ProviderResult:
         """Generate an image via the OpenAI images API.
 
@@ -90,19 +101,20 @@ class OpenAIProvider(ImageProvider):
         a slow response raises ``httpx.ReadTimeout``, surfaced as
         :class:`~image_gen.exceptions.ProviderError`.
         """
+        model = model or self._model
         size = _compute_size(aspect_ratio, resolution)
         quality, _ = _RESOLUTION_MAP[resolution]
 
         logger.info(
             "Calling OpenAI images API",
-            model=self._model,
+            model=model,
             size=size,
             quality=quality,
         )
 
         try:
             response = await self._client.images.generate(
-                model=self._model,
+                model=model,
                 prompt=prompt,
                 n=1,
                 size=size,
@@ -122,8 +134,23 @@ class OpenAIProvider(ImageProvider):
             raise ProviderError(msg)
 
         image_data = decode_b64_image(b64, "OpenAI")
-        logger.info("OpenAI image generated successfully", model=self._model, size=size)
+        logger.info("OpenAI image generated successfully", model=model, size=size)
         return ProviderResult(image_data=image_data, mime_type="image/png")
+
+    async def list_models(self) -> list[str]:
+        """Discover OpenAI image models via ``models.list()``.
+
+        The API has no capability field, so ids are matched against
+        :data:`_IMAGE_MODEL_RE` (``gpt-image-*`` / ``dall-e-*``).  Any failure
+        degrades to the configured default.
+        """
+        try:
+            page = await self._client.models.list()
+            discovered = [m.id for m in page.data if _IMAGE_MODEL_RE.match(m.id)]
+        except Exception as exc:
+            logger.warning("OpenAI model discovery failed", error=str(exc))
+            discovered = []
+        return models_with_default(self._model, discovered)
 
     async def aclose(self) -> None:
         """Close the underlying AsyncOpenAI client."""

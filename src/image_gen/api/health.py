@@ -19,6 +19,7 @@ async def ready(request: Request) -> ReadyResponse:
     db = request.app.state.db
     registry: dict = request.app.state.provider_registry
     settings = request.app.state.settings
+    provider_models: dict[str, list[str]] = getattr(request.app.state, "provider_models", {})
 
     # Verify DB is reachable (fetchone ensures the query actually executes)
     cursor = await db.execute("SELECT 1")
@@ -29,4 +30,5 @@ async def ready(request: Request) -> ReadyResponse:
     return ReadyResponse(
         default_provider=settings.default_provider,
         providers=sorted(registry.keys()),
+        models=provider_models,
     )

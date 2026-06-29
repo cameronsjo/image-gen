@@ -24,7 +24,7 @@ from google.genai import types
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError
-from image_gen.services.provider import ImageProvider, ProviderResult
+from image_gen.services.provider import ImageProvider, ProviderResult, models_with_default
 
 logger = structlog.get_logger()
 
@@ -57,6 +57,7 @@ class GeminiProvider(ImageProvider):
         prompt: str,
         aspect_ratio: str = "1:1",
         resolution: str = "2K",
+        model: str | None = None,
     ) -> ProviderResult:
         """Generate an image from a text prompt with retry on transient failures.
 
@@ -67,6 +68,8 @@ class GeminiProvider(ImageProvider):
         if not prompt.strip():
             msg = "Prompt cannot be empty"
             raise ProviderError(msg)
+
+        model = model or self._model
 
         config = types.GenerateContentConfig(
             response_modalities=["IMAGE"],
@@ -81,7 +84,7 @@ class GeminiProvider(ImageProvider):
             try:
                 logger.info(
                     "Calling Gemini API",
-                    model=self._model,
+                    model=model,
                     aspect_ratio=aspect_ratio,
                     resolution=resolution,
                     attempt=attempt + 1,
@@ -93,14 +96,14 @@ class GeminiProvider(ImageProvider):
                 async with asyncio.timeout(self._timeout):
                     response = await asyncio.to_thread(
                         self._client.models.generate_content,
-                        model=self._model,
+                        model=model,
                         contents=prompt,
                         config=config,
                     )
 
                 for part in response.parts or []:
                     if part.inline_data is not None and part.inline_data.data is not None:
-                        logger.info("Image generated successfully", model=self._model)
+                        logger.info("Image generated successfully", model=model)
                         return ProviderResult(
                             image_data=part.inline_data.data,
                             mime_type=part.inline_data.mime_type or "image/png",
@@ -132,6 +135,34 @@ class GeminiProvider(ImageProvider):
 
         msg = f"Gemini generation failed after {MAX_RETRIES} retries"
         raise ProviderError(msg) from last_error
+
+    async def list_models(self) -> list[str]:
+        """Discover Gemini image models via the SDK ``models.list()``.
+
+        The SDK is synchronous, so the call runs in a worker thread.  Names arrive
+        with a ``models/`` prefix (e.g. ``models/gemini-2.5-flash-image``); we strip
+        it so ids match what :meth:`generate_image` passes to the API, and keep only
+        models whose name mentions ``image``/``imagen``.  Any failure degrades to the
+        configured default.
+        """
+        try:
+            # Materialize the full pager *inside* the worker thread: the SDK may
+            # fetch later pages lazily on iteration (blocking HTTP), which would
+            # otherwise run on the event loop. list(...) forces all pages in-thread.
+            entries = await asyncio.to_thread(lambda: list(self._client.models.list()))
+            discovered: list[str] = []
+            for entry in entries:
+                raw = getattr(entry, "name", None)
+                if not raw:
+                    continue
+                name = raw.removeprefix("models/")
+                lowered = name.lower()
+                if "image" in lowered or "imagen" in lowered:
+                    discovered.append(name)
+        except Exception as exc:
+            logger.warning("Gemini model discovery failed", error=str(exc))
+            discovered = []
+        return models_with_default(self._model, discovered)
 
 
 # Backward-compatible alias — existing import sites outside this module
