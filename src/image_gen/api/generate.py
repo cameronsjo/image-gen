@@ -48,13 +48,15 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
     provider: ImageProvider = registry[provider_name]
 
     # Resolve and validate model selection.  Omitted → the provider's configured
-    # default.  An explicit model is rejected only when discovery produced a
-    # non-empty list that excludes it (mirrors the provider-not-configured 422);
-    # an empty list means discovery degraded, so we trust the caller rather than
-    # block a model the provider may still serve.
-    available_models: list[str] = request.app.state.provider_models.get(provider_name, [])
+    # default.  The allowlist is the discovered list, or — when discovery degraded
+    # to an empty list — the configured default alone: we fail closed rather than
+    # accept an arbitrary string that would otherwise reach the provider API on the
+    # server's key and be persisted.  An explicit model outside the allowlist
+    # returns 422 (mirrors the provider-not-configured shape).
+    discovered: list[str] = request.app.state.provider_models.get(provider_name, [])
+    available_models = discovered or [provider.model_name]
     model = body.model or provider.model_name
-    if body.model and available_models and body.model not in available_models:
+    if body.model and body.model not in available_models:
         raise HTTPException(
             status_code=422,
             detail={

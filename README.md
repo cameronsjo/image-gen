@@ -65,9 +65,11 @@ Include an optional `model` field to override the provider's configured default 
 ```
 
 Omitting `model` uses the provider's configured default (see `IMAGEGEN_GEMINI_MODEL` etc. above).
-An explicit model is validated against the list discovered at startup; if the list is non-empty
-and the requested model is absent, the API returns HTTP 422 with `available_models`.
-The selected model is persisted in the DB and echoed back in the response.
+An explicit model is validated against the list discovered at startup; if the requested model is
+absent, the API returns HTTP 422 with `available_models`. If discovery degraded for a provider,
+the allowlist falls back to the configured default alone (fail-closed) — only the default is
+accepted until discovery recovers. The selected model is persisted in the DB and echoed back in
+the response.
 
 Available models per provider are advertised on `GET /ready` under `models: { provider: [ids] }`,
 with the configured default listed first. The web UI populates its model dropdown from this

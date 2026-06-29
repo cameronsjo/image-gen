@@ -6,8 +6,6 @@ Covers:
 - Generate endpoint: empty ``provider_models`` entry (degraded discovery) accepts any model
 """
 
-from unittest.mock import AsyncMock
-
 from httpx import AsyncClient
 
 from image_gen.services.provider import models_with_default
@@ -82,40 +80,23 @@ async def test_discover_models_empty_registry_returns_empty_dict():
 
 # ---------------------------------------------------------------------------
 # Generate endpoint — degraded-discovery path (empty available_models)
+#
+# When discovery degrades to an empty list for a provider, the endpoint FAILS
+# CLOSED: the allowlist falls back to ``[provider.model_name]`` (the configured
+# default), so only the default is accepted and an arbitrary string is rejected
+# rather than reaching the provider API on the server's key.
 # ---------------------------------------------------------------------------
 
 
-async def test_generate_accepts_explicit_model_when_discovery_degraded(
+async def test_generate_rejects_unknown_model_when_discovery_degraded(
     client: AsyncClient,
 ) -> None:
-    """When ``provider_models`` holds an empty list for a provider (total discovery
-    failure), the endpoint trusts the caller and accepts any explicit model name
-    rather than returning 422.
-
-    The code path under test:
-        available_models = request.app.state.provider_models.get(provider_name, [])
-        if body.model and available_models and body.model not in available_models:
-            raise HTTPException(422, ...)  # ← NOT reached when available_models is []
-    """
-    from image_gen.services.provider import ProviderResult
-
+    """Total discovery failure (empty ``provider_models`` entry) → fail closed:
+    an explicit model that is not the configured default returns 422, with
+    ``available_models`` reporting the default-only allowlist."""
     app = client._transport.app  # type: ignore[attr-defined]
     original_models = app.state.provider_models.get("gemini", [])
-
-    # Simulate total discovery failure: discovery produced nothing for gemini.
-    app.state.provider_models["gemini"] = []
-
-    # Also make the provider return a successful result for the unknown model.
-    fake_png = (
-        b"\x89PNG\r\n\x1a\n"
-        b"\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02"
-        b"\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx"
-        b"\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N"
-        b"\x00\x00\x00\x00IEND\xaeB`\x82"
-    )
-    app.state.provider_registry["gemini"].generate_image = AsyncMock(
-        return_value=ProviderResult(image_data=fake_png, mime_type="image/png")
-    )
+    app.state.provider_models["gemini"] = []  # simulate total discovery failure
 
     try:
         resp = await client.post(
@@ -126,7 +107,33 @@ async def test_generate_accepts_explicit_model_when_discovery_degraded(
                 "model": "gemini-unknown-future-model",
             },
         )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        # Allowlist falls back to the configured default alone.
+        assert detail["available_models"] == ["gemini-3-pro-image-preview"]
+    finally:
+        app.state.provider_models["gemini"] = original_models
+
+
+async def test_generate_accepts_default_model_when_discovery_degraded(
+    client: AsyncClient,
+) -> None:
+    """Even with discovery degraded, the configured default model is still accepted
+    (the default-only allowlist contains it)."""
+    app = client._transport.app  # type: ignore[attr-defined]
+    original_models = app.state.provider_models.get("gemini", [])
+    app.state.provider_models["gemini"] = []  # simulate total discovery failure
+
+    try:
+        resp = await client.post(
+            "/api/generate",
+            json={
+                "name": "degraded-default",
+                "prompt": _VALID_PROMPT,
+                "model": "gemini-3-pro-image-preview",
+            },
+        )
         assert resp.status_code == 201
-        assert resp.json()["model"] == "gemini-unknown-future-model"
+        assert resp.json()["model"] == "gemini-3-pro-image-preview"
     finally:
         app.state.provider_models["gemini"] = original_models
