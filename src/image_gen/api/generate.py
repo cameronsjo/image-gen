@@ -24,8 +24,9 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
 
     Flow: validate → check quota → consume token → call provider → save image → return.
 
-    The ``provider`` field selects the backend (gemini / openai / openrouter).  If the
-    requested provider is not configured (API key missing) the endpoint returns 422.
+    The ``provider`` field selects the backend (gemini / openai / openrouter / comfyui).
+    If the requested provider is not configured (API key or ComfyUI URL missing) the
+    endpoint returns 422.
     """
     registry: dict[str, ImageProvider] = request.app.state.provider_registry
     storage: StorageService = request.app.state.storage

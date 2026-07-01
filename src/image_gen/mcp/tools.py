@@ -89,7 +89,7 @@ def register(mcp: FastMCP) -> None:
             str,
             Field(
                 default="gemini",
-                description="Image generation provider: gemini, openai, or openrouter",
+                description="Image generation provider: gemini, openai, openrouter, or comfyui",
             ),
         ] = "gemini",
         ctx: Context | None = None,

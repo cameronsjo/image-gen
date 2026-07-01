@@ -11,6 +11,7 @@ import structlog
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderNotConfiguredError
+from image_gen.services.comfyui_provider import ComfyUIProvider
 from image_gen.services.gemini import GeminiProvider
 from image_gen.services.openai_provider import OpenAIProvider
 from image_gen.services.openrouter_provider import OpenRouterProvider
@@ -43,6 +44,16 @@ def build_registry(settings: Settings) -> dict[str, ImageProvider]:
     if settings.openrouter_api_key:
         registry["openrouter"] = OpenRouterProvider(settings)
         logger.debug("Registered provider", provider="openrouter", model=settings.openrouter_model)
+
+    # ComfyUI registers on a configured URL (not an API key) — it is a local server,
+    # so absence of the URL (e.g. in the homelab container) keeps it out of the registry.
+    if settings.comfyui_url:
+        registry["comfyui"] = ComfyUIProvider(settings)
+        logger.debug("Registered provider", provider="comfyui", model=settings.comfyui_model)
+    else:
+        logger.debug(
+            "Skipping ComfyUI provider registration", reason="IMAGEGEN_COMFYUI_URL not set"
+        )
 
     if settings.default_provider not in registry:
         configured = sorted(registry.keys()) or ["none"]

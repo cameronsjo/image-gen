@@ -33,6 +33,19 @@ class Settings(BaseSettings):
         default="openai/gpt-image-2", description="OpenRouter model identifier"
     )
 
+    # Local ComfyUI provider (localhost only — unset in the homelab container so the
+    # provider never registers there; see ADR 0004).
+    comfyui_url: str | None = Field(
+        default=None, description="Base URL of a local ComfyUI server, e.g. http://127.0.0.1:8188"
+    )
+    comfyui_model: str = Field(
+        default="flux1-schnell", description="ComfyUI diffusion model (informational/list_models)"
+    )
+    comfyui_steps: int = Field(default=4, description="Sampler steps (FLUX.1-schnell is ~4)")
+    comfyui_workflow: Path | None = Field(
+        default=None, description="Override the bundled API-format workflow JSON template"
+    )
+
     # Provider selection
     default_provider: ProviderName = Field(
         default=ProviderName.GEMINI, description="Default image generation provider"

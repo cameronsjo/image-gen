@@ -36,6 +36,7 @@ class ProviderName(StrEnum):
     GEMINI = "gemini"
     OPENAI = "openai"
     OPENROUTER = "openrouter"
+    COMFYUI = "comfyui"
 
 
 class GenerationStatus(StrEnum):
