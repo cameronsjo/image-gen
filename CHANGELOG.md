@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/cameronsjo/image-gen/compare/v0.1.7...v0.1.8) (2026-07-01)
+
+
+### Features
+
+* web UI with dynamic model selection ([#18](https://github.com/cameronsjo/image-gen/issues/18)) ([b6caab4](https://github.com/cameronsjo/image-gen/commit/b6caab4d1f74e572854197546577212011e2e9de))
+
 ## [0.1.7](https://github.com/cameronsjo/image-gen/compare/v0.1.6...v0.1.7) (2026-06-28)
 
 
