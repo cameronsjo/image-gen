@@ -69,9 +69,10 @@ async def test_generate_unconfigured_provider_returns_422(client: AsyncClient) -
 
 
 async def test_generate_per_request_provider_selection(client: AsyncClient) -> None:
-    """A mock openai provider in the registry is selected correctly."""
+    """A mock openai provider in the registry is selected correctly, and a cost
+    reported by the provider is captured and echoed in the response."""
     app = client._transport.app  # type: ignore[attr-defined]
-    fake_result = ProviderResult(image_data=_FAKE_PNG, mime_type="image/png")
+    fake_result = ProviderResult(image_data=_FAKE_PNG, mime_type="image/png", cost_usd=0.0042)
     mock_openai = AsyncMock(return_value=fake_result)
 
     # Inject a mock openai provider into the registry
@@ -88,11 +89,26 @@ async def test_generate_per_request_provider_selection(client: AsyncClient) -> N
         json={"name": "openai-test", "prompt": VALID_PROMPT, "provider": "openai"},
     )
     assert resp.status_code == 201
-    assert resp.json()["provider"] == "openai"
+    body = resp.json()
+    assert body["provider"] == "openai"
+    # The provider-reported cost round-trips through update_generation → the response.
+    assert body["cost_usd"] == 0.0042
+    # The descriptive download name is serialized for the UI / Content-Disposition.
+    assert body["download_name"].endswith(body["id"] + ".png")
     mock_openai.assert_awaited_once()
 
     # Cleanup
     del app.state.provider_registry["openai"]
+
+
+async def test_generate_cost_usd_none_when_provider_omits(client: AsyncClient) -> None:
+    """The default gemini mock reports no cost → cost_usd is null in the response."""
+    resp = await client.post(
+        "/api/generate",
+        json={"name": "no-cost", "prompt": VALID_PROMPT},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["cost_usd"] is None
 
 
 async def test_generate_defaults_model_to_provider_default(client: AsyncClient) -> None:

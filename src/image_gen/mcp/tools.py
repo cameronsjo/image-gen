@@ -172,15 +172,19 @@ def register(mcp: FastMCP) -> None:
                 status=GenerationStatus.COMPLETED,
                 file_path=str(file_path),
                 file_size=file_size,
+                cost_usd=result.cost_usd,
                 completed_at=datetime.now(UTC),
             )
 
+            # Only surface a cost line when the provider reported one (OpenRouter).
+            cost_line = f"Cost: ${result.cost_usd:.4f}\n" if result.cost_usd is not None else ""
             return (
                 f"Image generated successfully!\n"
                 f"ID: {record.id}\n"
                 f"Name: {name}\n"
                 f"Provider: {provider}\n"
                 f"File size: {file_size:,} bytes\n"
+                f"{cost_line}"
                 f"Path: {file_path}"
             )
 

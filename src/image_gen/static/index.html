@@ -471,12 +471,13 @@ button{ font:inherit; }
     add('resolution', rec.resolution); add('aspect', rec.aspect_ratio);
     add('dimensions', dims(rec)); add('seed', rec.seed); add('duration', dur(rec));
     add('created', relTime(rec.created_at||rec.createdAt||rec.created));
+    if(rec.cost_usd!=null) add('cost', '$'+Number(rec.cost_usd).toFixed(4));
     els.meta.innerHTML = rows.join('');
 
     // actions
     els.btnDownload.onclick = function(){
       var a=document.createElement('a'); a.href=API.file(rec.id);
-      a.download=(rec.name||rec.id)+'.png'; document.body.appendChild(a); a.click(); a.remove();
+      a.download=rec.download_name||((rec.name||rec.id)+'.png'); document.body.appendChild(a); a.click(); a.remove();
     };
     els.btnOpen.onclick = function(){ window.open(API.file(rec.id), '_blank', 'noopener'); };
 

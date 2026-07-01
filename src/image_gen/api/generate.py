@@ -121,6 +121,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             status=GenerationStatus.COMPLETED,
             file_path=str(file_path),
             file_size=file_size,
+            cost_usd=result.cost_usd,
             completed_at=now,
         )
 
@@ -130,6 +131,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             user_id=user_id,
             provider=provider_name,
             file_size=file_size,
+            cost_usd=result.cost_usd,
         )
 
         # Return the updated record

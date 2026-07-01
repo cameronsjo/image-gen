@@ -4,7 +4,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+
+from image_gen.naming import download_filename
 
 
 class AspectRatio(StrEnum):
@@ -78,8 +80,20 @@ class GenerationResponse(BaseModel):
     error: str | None = None
     file_path: str | None = None
     file_size: int | None = None
+    cost_usd: float | None = None
     created_at: datetime
     completed_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def download_name(self) -> str:
+        """Descriptive, collision-free filename a client suggests when saving.
+
+        Built from the user-facing name, model, creation timestamp, and the ULID
+        tail (guarantees uniqueness).  Serialized into every API response so the UI
+        and the server's ``Content-Disposition`` agree without duplicating the logic.
+        """
+        return download_filename(self.name, self.model, self.created_at, self.id)
 
 
 class QuotaStatus(BaseModel):

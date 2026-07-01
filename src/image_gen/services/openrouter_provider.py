@@ -1,8 +1,8 @@
 """OpenRouter image-generation provider.
 
 Calls the OpenRouter image endpoint over plain HTTPX (OpenRouter has no official Python
-SDK).  Maps canonical resolution values to pixel-dimension strings compatible with the
-underlying model (defaulting to ``openai/gpt-image-2``).
+SDK).  OpenRouter validates ``resolution`` as a named bucket (``1K``/``2K``/``4K``), so
+the canonical resolution passes through unchanged (model defaults to ``openai/gpt-image-2``).
 
 OpenRouter request shape (POST https://openrouter.ai/api/v1/images):
   ``{model, prompt, n, resolution, quality, output_format}``
@@ -21,7 +21,6 @@ import structlog
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
-from image_gen.services._sizing import compute_size
 from image_gen.services.provider import (
     ImageProvider,
     ProviderResult,
@@ -41,19 +40,6 @@ _RESOLUTION_MAP: dict[str, tuple[str, int]] = {
     "2K": ("medium", 2048),
     "4K": ("high", 3840),
 }
-
-
-def _compute_resolution(aspect_ratio: str, resolution: str) -> str:
-    """Return a ``WxH`` size string for OpenRouter.
-
-    Raises:
-        UnsupportedParameterError: If the ratio or resolution is not recognised.
-    """
-    if resolution not in _RESOLUTION_MAP:
-        msg = f"OpenRouter provider does not recognise resolution {resolution!r}"
-        raise UnsupportedParameterError(msg)
-    _, base = _RESOLUTION_MAP[resolution]
-    return compute_size(aspect_ratio, base, "OpenRouter")
 
 
 class OpenRouterProvider(ImageProvider):
@@ -88,14 +74,20 @@ class OpenRouterProvider(ImageProvider):
         :func:`asyncio.timeout` wraps it as an outer backstop.
         """
         model = model or self._model
-        size_str = _compute_resolution(aspect_ratio, resolution)
+        if resolution not in _RESOLUTION_MAP:
+            msg = f"OpenRouter provider does not recognise resolution {resolution!r}"
+            raise UnsupportedParameterError(msg)
         quality, _ = _RESOLUTION_MAP[resolution]
 
+        # OpenRouter's image API validates `resolution` against a named-bucket enum
+        # ("512"/"1K"/"2K"/"4K") — send the canonical bucket, not a WxH string.
+        # NOTE: the bucket carries no aspect ratio; `aspect_ratio` is accepted for
+        # ImageProvider parity but not yet forwarded to this endpoint (follow-up).
         payload = {
             "model": model,
             "prompt": prompt,
             "n": 1,
-            "resolution": size_str,
+            "resolution": resolution,
             "quality": quality,
             "output_format": "png",
         }
@@ -107,7 +99,7 @@ class OpenRouterProvider(ImageProvider):
         logger.info(
             "Calling OpenRouter images API",
             model=model,
-            resolution=size_str,
+            resolution=resolution,
             quality=quality,
         )
 
@@ -142,9 +134,14 @@ class OpenRouterProvider(ImageProvider):
             msg = "OpenRouter response contained no image data"
             raise ProviderError(msg)
 
+        # OpenRouter reports the billed amount in ``usage.cost`` (USD, nullable and
+        # sometimes absent).  Read it defensively — its absence is never an error.
+        usage = data.get("usage") or {}
+        cost = usage.get("cost")
+
         image_data = decode_b64_image(b64, "OpenRouter")
-        logger.info("OpenRouter image generated successfully", model=model)
-        return ProviderResult(image_data=image_data, mime_type="image/png")
+        logger.info("OpenRouter image generated successfully", model=model, cost_usd=cost)
+        return ProviderResult(image_data=image_data, mime_type="image/png", cost_usd=cost)
 
     async def list_models(self) -> list[str]:
         """Discover OpenRouter image models from the public models catalogue.

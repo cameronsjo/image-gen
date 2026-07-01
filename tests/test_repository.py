@@ -145,6 +145,44 @@ async def test_update_generation_completed_fields(db: aiosqlite.Connection) -> N
     assert fetched.completed_at is not None
 
 
+async def test_update_generation_persists_cost_usd(db: aiosqlite.Connection) -> None:
+    record = await repository.create_generation(
+        db,
+        user_id="user-cost",
+        name="priced",
+        prompt="A jeweled goblet",
+        aspect_ratio="1:1",
+        resolution="2K",
+    )
+
+    await repository.update_generation(
+        db,
+        record.id,
+        status=GenerationStatus.COMPLETED,
+        cost_usd=0.0042,
+        completed_at=datetime.now(UTC),
+    )
+
+    fetched = await repository.get_generation(db, record.id)
+    assert fetched is not None
+    assert fetched.cost_usd == 0.0042
+
+
+async def test_create_generation_cost_usd_defaults_to_none(db: aiosqlite.Connection) -> None:
+    record = await repository.create_generation(
+        db,
+        user_id="user-no-cost",
+        name="unpriced",
+        prompt="A plain mug",
+        aspect_ratio="1:1",
+        resolution="2K",
+    )
+
+    fetched = await repository.get_generation(db, record.id)
+    assert fetched is not None
+    assert fetched.cost_usd is None
+
+
 async def test_update_generation_error_fields(db: aiosqlite.Connection) -> None:
     record = await repository.create_generation(
         db,
