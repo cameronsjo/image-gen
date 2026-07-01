@@ -74,6 +74,7 @@ async def test_mcp_registry_selects_injected_provider(mcp_client):
 
     openai_provider = MagicMock()
     openai_provider.name = "openai"
+    openai_provider.model_name = "openai/gpt-image-2"
     openai_provider.generate_image = mock_openai
     app.state.provider_registry["openai"] = openai_provider
 

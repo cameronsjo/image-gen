@@ -51,6 +51,30 @@ Include a `provider` field in `POST /api/generate` or the MCP `generate_image` t
 
 Unknown or unconfigured providers return HTTP 422 with `available_providers`.
 
+### Per-Request Model Selection
+
+Include an optional `model` field to override the provider's configured default for a single request:
+
+```json
+{
+  "name": "my-image",
+  "prompt": "...",
+  "provider": "gemini",
+  "model": "gemini-2.5-flash-image"
+}
+```
+
+Omitting `model` uses the provider's configured default (see `IMAGEGEN_GEMINI_MODEL` etc. above).
+An explicit model is validated against the list discovered at startup; if the requested model is
+absent, the API returns HTTP 422 with `available_models`. If discovery degraded for a provider,
+the allowlist falls back to the configured default alone (fail-closed) — only the default is
+accepted until discovery recovers. The selected model is persisted in the DB and echoed back in
+the response.
+
+Available models per provider are advertised on `GET /ready` under `models: { provider: [ids] }`,
+with the configured default listed first. The web UI populates its model dropdown from this
+endpoint at startup.
+
 ### Provider Models
 
 | Variable | Default | Description |
@@ -98,7 +122,7 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/health` | No | Liveness probe |
-| `GET` | `/ready` | No | Readiness probe (DB + model check) |
+| `GET` | `/ready` | No | Readiness probe (DB + providers + discovered models) |
 | `POST` | `/api/generate` | Yes | Generate an image from a text prompt |
 | `GET` | `/api/images` | Yes | List generation records |
 | `GET` | `/api/images/{id}` | Yes | Get generation metadata |

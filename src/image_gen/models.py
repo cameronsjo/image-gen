@@ -4,7 +4,9 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+
+from image_gen.naming import download_filename
 
 
 class AspectRatio(StrEnum):
@@ -57,6 +59,10 @@ class GenerationRequest(BaseModel):
     provider: ProviderName = Field(
         default=ProviderName.GEMINI, description="Image generation provider"
     )
+    model: str | None = Field(
+        default=None,
+        description="Provider model identifier; omit to use the provider's configured default",
+    )
 
 
 class GenerationResponse(BaseModel):
@@ -69,12 +75,25 @@ class GenerationResponse(BaseModel):
     aspect_ratio: str
     resolution: str
     provider: ProviderName = ProviderName.GEMINI
+    model: str | None = None
     status: GenerationStatus
     error: str | None = None
     file_path: str | None = None
     file_size: int | None = None
+    cost_usd: float | None = None
     created_at: datetime
     completed_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def download_name(self) -> str:
+        """Descriptive, collision-free filename a client suggests when saving.
+
+        Built from the user-facing name, model, creation timestamp, and the ULID
+        tail (guarantees uniqueness).  Serialized into every API response so the UI
+        and the server's ``Content-Disposition`` agree without duplicating the logic.
+        """
+        return download_filename(self.name, self.model, self.created_at, self.id)
 
 
 class QuotaStatus(BaseModel):
@@ -102,3 +121,7 @@ class ReadyResponse(BaseModel):
     database: Literal["connected"] = "connected"
     default_provider: str
     providers: list[str]
+    models: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Discovered image models per provider (configured default first)",
+    )

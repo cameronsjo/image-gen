@@ -47,6 +47,24 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
         )
     provider: ImageProvider = registry[provider_name]
 
+    # Resolve and validate model selection.  Omitted → the provider's configured
+    # default.  The allowlist is the discovered list, or — when discovery degraded
+    # to an empty list — the configured default alone: we fail closed rather than
+    # accept an arbitrary string that would otherwise reach the provider API on the
+    # server's key and be persisted.  An explicit model outside the allowlist
+    # returns 422 (mirrors the provider-not-configured shape).
+    discovered: list[str] = request.app.state.provider_models.get(provider_name, [])
+    available_models = discovered or [provider.model_name]
+    model = body.model or provider.model_name
+    if body.model and body.model not in available_models:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": f"Model {body.model!r} is not available for provider {provider_name!r}",
+                "available_models": available_models,
+            },
+        )
+
     # Pre-flight validation (cost boundary: Expensive tier)
     parsed = ParsedPrompt(
         name=body.name,
@@ -79,6 +97,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
         aspect_ratio=body.aspect_ratio.value,
         resolution=body.resolution.value,
         provider=provider_name,
+        model=model,
     )
 
     # Update to generating status
@@ -89,6 +108,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             prompt=body.prompt,
             aspect_ratio=body.aspect_ratio.value,
             resolution=body.resolution.value,
+            model=model,
         )
 
         file_path = await storage.save_image(result.image_data, record.id)
@@ -101,6 +121,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             status=GenerationStatus.COMPLETED,
             file_path=str(file_path),
             file_size=file_size,
+            cost_usd=result.cost_usd,
             completed_at=now,
         )
 
@@ -110,6 +131,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             user_id=user_id,
             provider=provider_name,
             file_size=file_size,
+            cost_usd=result.cost_usd,
         )
 
         # Return the updated record

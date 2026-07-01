@@ -1,5 +1,6 @@
 """Tests for image browsing and download endpoints."""
 
+import re
 from unittest.mock import MagicMock
 
 from httpx import AsyncClient
@@ -59,6 +60,23 @@ async def test_download_image_file(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "image/png"
     assert len(resp.content) > 0
+
+
+async def test_download_filename_is_descriptive(client: AsyncClient) -> None:
+    """Content-Disposition offers the descriptive, collision-free download_name,
+    not the bare ``<name>.png`` it used to."""
+    created = await _create_image(client)
+    expected = created["download_name"]
+
+    resp = await client.get(f"/api/images/{created['id']}/file")
+    assert resp.status_code == 200
+    disposition = resp.headers["content-disposition"]
+    # The header offers exactly the server-computed name...
+    assert expected in disposition
+    # ...which is descriptive, not the old "<name>.png".
+    assert expected != f"{created['name']}.png"
+    # Shape: name-model-YYYYMMDD-HHMMSS-<ULID>.png
+    assert re.search(r"-\d{8}-\d{6}-[0-9A-Za-z]{26}\.png", disposition)
 
 
 async def test_download_nonexistent_image(client: AsyncClient) -> None:

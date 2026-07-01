@@ -100,5 +100,11 @@ docs/_build/
 # Claude Code subagent memory (machine-local cache, not project source)
 .claude/agent-memory/
 
+# Claude Code agent worktrees (isolated checkouts + their venvs)
+.claude/worktrees/
+
 # Generated images
 output/
+
+# Runtime data (local dev SQLite DB + generated image store)
+data/

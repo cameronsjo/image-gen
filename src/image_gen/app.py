@@ -3,9 +3,12 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import Depends, FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from image_gen.api import generate, health, images
@@ -16,10 +19,16 @@ from image_gen.mcp.server import create_mcp_server
 from image_gen.mcp.tools import set_app_ref
 from image_gen.middleware import RequestIDMiddleware
 from image_gen.services.quota import QuotaService
-from image_gen.services.registry import build_registry
+from image_gen.services.registry import build_registry, discover_models
 from image_gen.services.storage import StorageService
 
 logger = structlog.get_logger()
+
+_STATIC_DIR = Path(__file__).parent / "static"
+
+# Per-provider bound on the startup list-models call.  Discovery is best-effort and
+# must never stall boot, so it stays well under the (longer) generation timeout.
+_MODEL_DISCOVERY_TIMEOUT = 10.0
 
 
 class MCPSlashRewrite:
@@ -73,6 +82,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
         # Build provider registry — fails fast if default_provider not configured
         app.state.provider_registry = build_registry(settings)
+
+        # Discover each provider's image models once at startup (best-effort, bounded).
+        # A down list-API degrades to [default] and never blocks boot.
+        try:
+            app.state.provider_models = await discover_models(
+                app.state.provider_registry, timeout=_MODEL_DISCOVERY_TIMEOUT
+            )
+        except Exception as exc:  # defensive — discovery must never block startup
+            logger.warning("Model discovery failed entirely", error=str(exc))
+            app.state.provider_models = {}
 
         # Initialize remaining services
         app.state.storage = StorageService(settings)
@@ -131,6 +150,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(generate.router, dependencies=[Depends(get_current_user)])
     app.include_router(images.router, dependencies=[Depends(get_current_user)])
+
+    # Serve the static web UI at /ui — no auth gate (the assets carry no secrets;
+    # the API calls they make stay auth-gated in prod). html=True serves
+    # index.html at /ui/. Mounted at /ui so it can't shadow /api, /mcp, /health.
+    app.mount("/ui", StaticFiles(directory=_STATIC_DIR, html=True), name="ui")
+
+    @app.get("/", include_in_schema=False)
+    async def root() -> RedirectResponse:
+        """Send the bare host to the web UI."""
+        return RedirectResponse(url="/ui/")
 
     # Mount MCP server at /mcp — store the sub-app on state so the
     # lifespan can compose the MCP session manager lifecycle
