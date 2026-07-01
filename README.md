@@ -17,8 +17,9 @@ make test
 
 ## Providers / Configuration
 
-image-gen supports multiple image generation backends. Set at least one provider API key;
-the service will start only the providers whose keys are present.
+image-gen supports multiple image generation backends. Set at least one provider API key
+(or, for local ComfyUI, a server URL); the service will start only the providers that are
+configured.
 
 ### Provider API Keys
 
@@ -27,11 +28,12 @@ the service will start only the providers whose keys are present.
 | `IMAGEGEN_GOOGLE_API_KEY` | Gemini | Google API key for Gemini 3 Pro |
 | `IMAGEGEN_OPENAI_API_KEY` | OpenAI | OpenAI API key (gpt-image-2) |
 | `IMAGEGEN_OPENROUTER_API_KEY` | OpenRouter | OpenRouter API key |
+| `IMAGEGEN_COMFYUI_URL` | ComfyUI (local) | Base URL of a local ComfyUI server (e.g. `http://127.0.0.1:8188`) — generates on-device at zero API cost. See [docs/how-to-local-comfyui.md](docs/how-to-local-comfyui.md) and [ADR 0004](docs/adr/0004-local-comfyui-provider.md). |
 
 ### Default Provider
 
 ```bash
-IMAGEGEN_DEFAULT_PROVIDER=gemini   # gemini | openai | openrouter (default: gemini)
+IMAGEGEN_DEFAULT_PROVIDER=gemini   # gemini | openai | openrouter | comfyui (default: gemini)
 ```
 
 The service fails to start if `IMAGEGEN_DEFAULT_PROVIDER` names a provider whose key
@@ -58,6 +60,8 @@ Unknown or unconfigured providers return HTTP 422 with `available_providers`.
 | `IMAGEGEN_GEMINI_MODEL` | `gemini-3-pro-image-preview` | Gemini model |
 | `IMAGEGEN_OPENAI_MODEL` | `gpt-image-2` | OpenAI image model |
 | `IMAGEGEN_OPENROUTER_MODEL` | `openai/gpt-image-2` | OpenRouter model id |
+| `IMAGEGEN_COMFYUI_MODEL` | `flux1-schnell` | ComfyUI diffusion model (local) |
+| `IMAGEGEN_COMFYUI_STEPS` | `4` | ComfyUI sampler steps |
 | `IMAGEGEN_REQUEST_TIMEOUT_SECONDS` | `120.0` | Provider call timeout |
 
 ## Configuration
