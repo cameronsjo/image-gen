@@ -153,8 +153,16 @@ class ComfyUIProvider(ImageProvider):
     def model_name(self) -> str:
         return self._model
 
-    def _build_graph(self, prompt: str, width: int, height: int) -> dict[str, Any]:
+    def _build_graph(
+        self, prompt: str, width: int, height: int, model: str | None = None
+    ) -> dict[str, Any]:
         """Return a fresh API-format graph with the dynamic fields injected.
+
+        *model*, when given, overrides the bundled template's ``unet_name`` (one
+        of the ``list_models()`` choices, e.g. ``"flux1-schnell.safetensors"``).
+        ``None`` leaves the template's own default checkpoint untouched — the
+        configured ``comfyui_model`` is informational only (see ``config.py``)
+        and is never itself a valid ``unet_name``, so it must not be injected.
 
         Malformed template input — invalid JSON or a non-object top level (e.g. an
         operator pointing ``comfyui_workflow`` at a UI-format export) — surfaces as
@@ -181,6 +189,10 @@ class ComfyUIProvider(ImageProvider):
             sampler = _find_node(graph, "KSampler")
             sampler["inputs"]["seed"] = random.getrandbits(63)
             sampler["inputs"]["steps"] = self._steps
+
+            if model is not None:
+                unet_loader = _find_node(graph, "UNETLoader")
+                unet_loader["inputs"]["unet_name"] = model
         except ProviderError as e:
             logger.error(
                 "Failed to inject workflow parameters",
@@ -197,8 +209,13 @@ class ComfyUIProvider(ImageProvider):
         prompt: str,
         aspect_ratio: str = "1:1",
         resolution: str = "2K",
+        model: str | None = None,
     ) -> ProviderResult:
         """Generate an image on the local ComfyUI server.
+
+        *model*, when given, must be one of the ``unet_name`` choices from
+        :meth:`list_models` and overrides the bundled workflow's checkpoint.
+        ``None`` uses the template's own default (FLUX.1-schnell).
 
         Wraps the full submit → poll → fetch flow in :func:`asyncio.timeout` so a
         hung server (or a never-completing job) surfaces as a timeout rather than
@@ -206,11 +223,11 @@ class ComfyUIProvider(ImageProvider):
         enough to cover ComfyUI's first-call model load.
         """
         width, height = _compute_dimensions(aspect_ratio, resolution)
-        graph = self._build_graph(prompt, width, height)
+        graph = self._build_graph(prompt, width, height, model)
 
         logger.info(
             "Submitting ComfyUI workflow",
-            model=self._model,
+            model=model or self._model,
             width=width,
             height=height,
             steps=self._steps,

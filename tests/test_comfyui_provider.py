@@ -175,6 +175,32 @@ class TestComfyUIProvider:
         # client_id is sent alongside the graph.
         assert mock_client.post.call_args.kwargs["json"]["client_id"]
 
+    async def test_model_override_injects_unet_name(self):
+        """An explicit ``model`` overrides the template's default checkpoint."""
+        provider, mock_client = _build_provider()
+        mock_client.post = AsyncMock(return_value=_queued_response())
+        mock_client.get = AsyncMock(side_effect=[_completed_history(), _view_response()])
+
+        await provider.generate_image(
+            "a red fox in snow", "1:1", "2K", model="flux1-dev.safetensors"
+        )
+
+        graph = mock_client.post.call_args.kwargs["json"]["prompt"]
+        unet_loader = next(n for n in graph.values() if n["class_type"] == "UNETLoader")
+        assert unet_loader["inputs"]["unet_name"] == "flux1-dev.safetensors"
+
+    async def test_no_model_override_keeps_template_default(self):
+        """``model=None`` (the default) leaves the bundled checkpoint untouched."""
+        provider, mock_client = _build_provider()
+        mock_client.post = AsyncMock(return_value=_queued_response())
+        mock_client.get = AsyncMock(side_effect=[_completed_history(), _view_response()])
+
+        await provider.generate_image("a red fox in snow", "1:1", "2K")
+
+        graph = mock_client.post.call_args.kwargs["json"]["prompt"]
+        unet_loader = next(n for n in graph.values() if n["class_type"] == "UNETLoader")
+        assert unet_loader["inputs"]["unet_name"] == "flux1-schnell.safetensors"
+
     async def test_polling_pending_then_complete(self):
         provider, mock_client = _build_provider()
         mock_client.post = AsyncMock(return_value=_queued_response())
