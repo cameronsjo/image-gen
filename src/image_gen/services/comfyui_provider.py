@@ -282,15 +282,22 @@ class ComfyUIProvider(ImageProvider):
 
             entry = resp.json().get(prompt_id)
             if entry is not None:
-                status_str = entry.get("status", {}).get("status_str")
+                status = entry.get("status", {})
+                status_str = status.get("status_str")
                 if status_str == "error":
-                    messages = entry.get("status", {}).get("messages", [])
+                    messages = status.get("messages", [])
                     msg = f"ComfyUI execution failed: {messages}"
                     logger.error("ComfyUI execution error", prompt_id=prompt_id, messages=messages)
                     raise ProviderError(msg)
                 if entry.get("outputs"):
                     logger.debug("ComfyUI execution completed", prompt_id=prompt_id)
                     return _extract_image_ref(entry["outputs"])
+                # A terminal-but-outputless job (e.g. a workflow missing a
+                # SaveImage node) would otherwise loop until the surrounding
+                # asyncio.timeout expires; fail fast instead.
+                if status.get("completed"):
+                    logger.debug("ComfyUI job completed with no outputs", prompt_id=prompt_id)
+                    return _extract_image_ref(entry.get("outputs") or {})
 
             await asyncio.sleep(_POLL_INTERVAL_SECONDS)
 

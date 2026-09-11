@@ -249,6 +249,19 @@ class TestComfyUIProvider:
         with pytest.raises(ProviderError, match="no output image"):
             await provider.generate_image("test", "1:1", "2K")
 
+    async def test_completed_with_no_outputs_fails_fast(self):
+        """A terminal job with no ``outputs`` key must not loop until timeout."""
+        provider, mock_client = _build_provider()
+        no_outputs = httpx.Response(
+            200,
+            json={_PROMPT_ID: {"status": {"status_str": "success", "completed": True}}},
+        )
+        mock_client.post = AsyncMock(return_value=_queued_response())
+        mock_client.get = AsyncMock(return_value=no_outputs)
+
+        with pytest.raises(ProviderError, match="no output image"):
+            await provider.generate_image("test", "1:1", "2K")
+
     async def test_pooled_client_reused_across_calls(self):
         with patch("image_gen.services.comfyui_provider.httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
