@@ -16,8 +16,13 @@ no way to route a single request to a specific backend.
 Replace the hardcoded `GeminiService` with a **provider abstraction layer** consisting of:
 
 1. **`ImageProvider` ABC** (`services/provider.py`) with:
-   - `async generate_image(prompt, aspect_ratio, resolution) -> ProviderResult` — the
-     core generation contract all providers implement.
+   - `async generate_image(prompt, aspect_ratio, resolution, model=None) -> ProviderResult` — the
+     core generation contract all providers implement.  `model` overrides the provider's
+     configured default for a single call; `None` falls back to `self.model_name`.
+   - `async list_models() -> list[str]` — discovers models the provider can serve; default
+     returns `[self.model_name]`; concrete providers override to query their list-models
+     API.  The configured default is always first in the returned list.  Any failure
+     degrades to `[self.model_name]` so discovery never removes a working model.
    - `async aclose() -> None` — releases pooled network resources; default is a no-op;
      providers that hold a long-lived client (e.g. `httpx.AsyncClient`) override it.
      Called once per provider during lifespan teardown.
@@ -54,8 +59,9 @@ Replace the hardcoded `GeminiService` with a **provider abstraction layer** cons
   to the SDK client so a hung upstream releases its worker thread at the source.
   `asyncio.timeout` is kept as an outer backstop bounding thread-dispatch and retry
   book-keeping.
-- `ReadyResponse` reports available providers and the configured default instead of a
-  hardcoded Gemini model name.
+- `ReadyResponse` reports available providers, the configured default, and a
+  `models: {provider: [ids]}` map of models discovered at startup (configured default
+  first per provider).  The web UI populates its model dropdown from this field.
 
 **Trade-offs:**
 - `app.state.gemini` is removed; callers that referenced it directly must update to

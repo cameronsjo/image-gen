@@ -71,5 +71,5 @@ async def get_image_file(
     return FileResponse(
         path=path,
         media_type="image/png",
-        filename=f"{record.name}.png",
+        filename=record.download_name,
     )

@@ -13,9 +13,11 @@ logger = structlog.get_logger()
 
 def _row_to_response(row: aiosqlite.Row) -> GenerationResponse:
     """Convert a database row to a GenerationResponse."""
-    # Defensive: provider column may be absent on pre-migration databases.
+    # Defensive: provider/model columns may be absent on pre-migration databases.
     # sqlite3.Row.__contains__ checks values, not keys — use .keys() explicitly.
     provider_val = row["provider"] if "provider" in row.keys() else "gemini"  # noqa: SIM118
+    model_val = row["model"] if "model" in row.keys() else None  # noqa: SIM118
+    cost_usd_val = row["cost_usd"] if "cost_usd" in row.keys() else None  # noqa: SIM118
 
     return GenerationResponse(
         id=row["id"],
@@ -25,10 +27,12 @@ def _row_to_response(row: aiosqlite.Row) -> GenerationResponse:
         aspect_ratio=row["aspect_ratio"],
         resolution=row["resolution"],
         provider=ProviderName(provider_val),
+        model=model_val,
         status=GenerationStatus(row["status"]),
         error=row["error"],
         file_path=row["file_path"],
         file_size=row["file_size"],
+        cost_usd=cost_usd_val,
         created_at=datetime.fromisoformat(row["created_at"]),
         completed_at=(datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None),
     )
@@ -43,6 +47,7 @@ async def create_generation(
     aspect_ratio: str,
     resolution: str,
     provider: str = "gemini",
+    model: str | None = None,
 ) -> GenerationResponse:
     """Insert a new generation record and return it."""
     generation_id = str(ULID())
@@ -51,10 +56,22 @@ async def create_generation(
     await db.execute(
         """
         INSERT INTO generations
-            (id, user_id, name, prompt, aspect_ratio, resolution, status, provider, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, name, prompt, aspect_ratio, resolution, status, provider, model,
+             created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (generation_id, user_id, name, prompt, aspect_ratio, resolution, "pending", provider, now),
+        (
+            generation_id,
+            user_id,
+            name,
+            prompt,
+            aspect_ratio,
+            resolution,
+            "pending",
+            provider,
+            model,
+            now,
+        ),
     )
     await db.commit()
 
@@ -64,6 +81,7 @@ async def create_generation(
         user_id=user_id,
         name=name,
         provider=provider,
+        model=model,
     )
 
     return GenerationResponse(
@@ -74,6 +92,7 @@ async def create_generation(
         aspect_ratio=aspect_ratio,
         resolution=resolution,
         provider=ProviderName(provider),
+        model=model,
         status=GenerationStatus.PENDING,
         created_at=datetime.fromisoformat(now),
     )
@@ -87,6 +106,7 @@ async def update_generation(
     error: str | None = None,
     file_path: str | None = None,
     file_size: int | None = None,
+    cost_usd: float | None = None,
     completed_at: datetime | None = None,
 ) -> None:
     """Update fields on an existing generation record."""
@@ -105,6 +125,9 @@ async def update_generation(
     if file_size is not None:
         updates.append("file_size = ?")
         params.append(file_size)
+    if cost_usd is not None:
+        updates.append("cost_usd = ?")
+        params.append(cost_usd)
     if completed_at is not None:
         updates.append("completed_at = ?")
         params.append(completed_at.isoformat())
