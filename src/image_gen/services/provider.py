@@ -6,6 +6,7 @@ The concrete implementations live alongside this module:
 - :mod:`image_gen.services.gemini` — Google Gemini
 - :mod:`image_gen.services.openai_provider` — OpenAI gpt-image-2
 - :mod:`image_gen.services.openrouter_provider` — OpenRouter (any model)
+- :mod:`image_gen.services.comfyui_provider` — local ComfyUI (FLUX/SD)
 """
 
 import base64
@@ -53,7 +54,7 @@ def models_with_default(default: str, discovered: list[str]) -> list[str]:
 class ImageProvider(ABC):
     """Abstract base for image generation providers."""
 
-    name: str  # "gemini" | "openai" | "openrouter"
+    name: str  # "gemini" | "openai" | "openrouter" | "comfyui"
 
     @property
     @abstractmethod

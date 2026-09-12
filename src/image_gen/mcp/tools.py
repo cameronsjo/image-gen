@@ -83,13 +83,17 @@ def register(mcp: FastMCP) -> None:
             str, Field(default="1:1", description="Image aspect ratio (e.g. 1:1, 16:9, 9:16)")
         ] = "1:1",
         resolution: Annotated[
-            str, Field(default="2K", description="Image resolution: 1K, 2K, or 4K")
+            str,
+            Field(
+                default="2K",
+                description="Resolution: 1K/2K for comfyui; 1K/2K/4K for cloud providers",
+            ),
         ] = "2K",
         provider: Annotated[
             str,
             Field(
                 default="gemini",
-                description="Image generation provider: gemini, openai, or openrouter",
+                description="Image generation provider: gemini, openai, openrouter, or comfyui",
             ),
         ] = "gemini",
         ctx: Context | None = None,
