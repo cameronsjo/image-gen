@@ -51,6 +51,7 @@ from image_gen.services.provider import decode_b64_image
     ],
 )
 def test_compute_dimensions_returns_integer_dimensions(ratio, base, expected):
+    """Integer dimensions and cloud formatting retain exact sizing boundary results."""
     dimensions = compute_dimensions(ratio, base, "TestProvider")
     assert dimensions == expected
     assert all(type(axis) is int for axis in dimensions)
@@ -58,6 +59,7 @@ def test_compute_dimensions_returns_integer_dimensions(ratio, base, expected):
 
 
 def test_compute_dimensions_rejects_unknown_ratio():
+    """The integer API preserves provider-attributed errors for unsupported ratios."""
     with pytest.raises(UnsupportedParameterError, match=r"Acme provider.*'7:3'"):
         compute_dimensions("7:3", 1024, "Acme")
 
