@@ -151,9 +151,11 @@ JWT verification retains the configured OIDC issuer and audience; tools scope
 images and quota to the SDK's verified token subject.
 
 The MCP mount always enables FastMCP's strict Host/Origin protection, independent
-of authentication. Localhost and loopback addresses work by default; other
-Host headers and untrusted browser Origins return HTTP 403. Non-browser clients
-may omit Origin. FastMCP's rejected-Host 421 is mapped to 403 on this mount only.
+of authentication. Localhost and loopback addresses work by default; the SDK
+also permits the bound server address. Host headers outside those defaults and
+the configured allowlist, and untrusted browser Origins, return HTTP 403.
+Non-browser clients may omit Origin. FastMCP's rejected-Host 421 is mapped to
+403 on this mount only.
 
 For LAN or Traefik access, explicitly extend the host and matching origin
 allowlists with JSON arrays (these two variables do **not** use `IMAGEGEN_`):

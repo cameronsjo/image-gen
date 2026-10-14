@@ -86,8 +86,15 @@ merge/deployment or history rewriting.
   `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` JSON-array allowlists for LAN/proxy
   access. Map the SDK's rejected-Host 421 to the requested 403 and document it.
 - [x] Run subject rejection tests on `tools/call` as well as `tools/list` in CI.
-- [ ] Complete final security review, quality gates, push and current-head CI;
-  write `report-fix3.md` and stop.
+- [x] Complete final security review and quality gates; push to PR #36 and
+  record current-head CI and delivery in `report-fix3.md`.
 
 The review finding that PR #36 bundled PR #34 is declined: merging current main
 after #34 landed removes those feature changes from the net SDK diff.
+
+Round-3 code/security review of `eb11b03` against main `2efeffa1` completed with
+no supported remaining findings. Codex independently ran all 302 tests (89.88%
+coverage), lint/format, mypy, rejection probe, package build/source consistency,
+and real-socket Host/Origin plus modern/legacy HTTP/stdio smoke. The reviewer
+independently reran all 66 focused tests and the real smoke. Live issuer/JWKS,
+paid providers, merge and deployment remain outside the verified boundary.
