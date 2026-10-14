@@ -135,11 +135,11 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 
 ## MCP Tools
 
-This SDK-upgrade checkpoint is held: otherwise valid JWTs without a nonblank
-subject can reach the shared anonymous scope. The proposed 401 rejection policy
-requires Cameron's security decision; see `docs/plans/2026-10-14-mcp-sdk-upgrade.md`.
-`uv run --locked python scripts/probe-mcp-subject.py` reproduces the failure with
-test-only tokens and temporary data. Do not deploy this checkpoint.
+Authenticated JWTs must contain a nonblank `sub`; otherwise the verifier returns
+HTTP 401 before tool dispatch. Anonymous access remains available only when
+authentication is disabled. `uv run --locked python scripts/probe-mcp-subject.py`
+checks missing, empty, and whitespace-only subjects using test-only tokens and
+temporary data in both protocol eras.
 
 The `/mcp` endpoint uses stateless Streamable HTTP with JSON responses. FastMCP 4
 and Python MCP SDK 2 support protocol `2026-07-28`: modern requests carry their

@@ -6,12 +6,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import jwt
 import pytest
 from asgi_lifespan import LifespanManager
-from fastmcp.server.auth import JWTVerifier
 from httpx import ASGITransport, AsyncClient
 from mcp.types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
 
 from image_gen.app import create_app
 from image_gen.db import repository
+from image_gen.mcp.server import SubjectJWTVerifier
 
 TOOL_NAMES = {"generate_image", "list_images", "get_quota_status"}
 MODERN_VERSION = "2026-07-28"
@@ -87,10 +87,10 @@ async def authenticated_client(settings):
         # Exercise the real factory's issuer/audience policy with local signing
         # material instead of fetching production JWKS.
         assert kwargs.pop("jwks_uri") == f"{settings.oidc_issuer}/jwks.json"
-        return JWTVerifier(public_key=SIGNING_KEY, algorithm="HS256", **kwargs)
+        return SubjectJWTVerifier(public_key=SIGNING_KEY, algorithm="HS256", **kwargs)
 
     with (
-        patch("image_gen.mcp.server.JWTVerifier", side_effect=test_verifier),
+        patch("image_gen.mcp.server.SubjectJWTVerifier", side_effect=test_verifier),
         patch("image_gen.services.gemini.genai.Client", return_value=MagicMock()),
         patch(
             "image_gen.services.gemini.GeminiProvider.list_models",
@@ -117,11 +117,12 @@ async def authenticated_client(settings):
 
 def _token(settings, *, user="alice", **overrides):
     claims = {
-        "sub": user,
         "iss": settings.oidc_issuer,
         "aud": settings.oidc_client_id,
         "exp": int(time.time()) + 60,
     }
+    if user is not None:
+        claims["sub"] = user
     claims.update(overrides)
     return jwt.encode(claims, SIGNING_KEY, algorithm="HS256")
 
@@ -150,7 +151,19 @@ async def test_verified_subject_scopes_images_and_quota(authenticated_client, mo
 
 
 @pytest.mark.parametrize("modern", [True, False])
-@pytest.mark.parametrize("invalid", ["missing", "malformed", "issuer", "audience", "expired"])
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        "missing",
+        "malformed",
+        "issuer",
+        "audience",
+        "expired",
+        "subject-missing",
+        "subject-empty",
+        "subject-whitespace",
+    ],
+)
 async def test_invalid_jwt_rejected_before_tool_listing(authenticated_client, modern, invalid):
     client, settings = authenticated_client
     tokens = {
@@ -159,6 +172,9 @@ async def test_invalid_jwt_rejected_before_tool_listing(authenticated_client, mo
         "issuer": _token(settings, iss="https://wrong-issuer.test"),
         "audience": _token(settings, aud="wrong-audience"),
         "expired": _token(settings, exp=int(time.time()) - 60),
+        "subject-missing": _token(settings, user=None),
+        "subject-empty": _token(settings, user=""),
+        "subject-whitespace": _token(settings, user=" \t "),
     }
     response = await client.post(
         "/mcp",

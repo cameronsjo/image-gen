@@ -18,22 +18,22 @@ No merge, deployment, credentials, or paid generations are authorized.
 - [x] Verify modern stateless HTTP, legacy HTTP, and stdio tool enumeration.
 - [x] Run the full test suite, lint, format, type checking, and package build.
 - [x] Independently review the final change.
-- [ ] Resolve the subjectless-JWT security policy with Cameron before publishing a PR.
+- [x] Resolve the subjectless-JWT security policy with Cameron before publishing a PR.
 - [ ] Open a ready PR after the policy is resolved; record CI results in report.md.
 
-## Held security decision
+## Approved security decision
 
 The SDK's JWT verifier accepts otherwise valid tokens without a nonblank `sub`.
-The current tool identity fallback then maps those authenticated requests to the
-shared `anonymous` image and quota scope. Independent review identified this
-as P1. This is not a deployable checkpoint despite the existing 247-test suite
-passing: the adversarial subjectless-token probe is a separate failing gate.
-Reproduce it with `uv run --locked python scripts/probe-mcp-subject.py`.
+Independent review demonstrated that the tool identity fallback exposed the
+shared `anonymous` image and quota scope. The pushed `wip: broken` checkpoint
+is retained in history; it is not deployable.
 
-The brief reserves security-behavior changes for Cameron. Codex therefore holds
-the upgrade PR and preserves the work as an explicitly broken checkpoint.
+Cameron approved fail-closed HTTP 401 rejection at the verifier boundary in
+`brief-fix2.md`. Codex implemented this as a new commit, without rewriting the
+pushed checkpoint. Valid identities remain unchanged; no service-token identity
+or shared-user policy is invented.
 
-Proposed policy for approval: reject any authenticated JWT whose verified
+Approved policy: reject any authenticated JWT whose verified
 subject is absent or whitespace, returning HTTP 401 before tool dispatch.
 Retain anonymous access only for auth-disabled operation. Implement this at
 the verifier boundary after its signature, issuer, audience, and expiry checks:
@@ -45,10 +45,10 @@ if token is None or not token.subject or not token.subject.strip():
 return token
 ```
 
-Add modern and legacy rejection tests for missing and blank subjects, rerun the
-full gates and real transport smoke, then re-engage the reviewer and publish.
-If service tokens without subjects must be supported, Cameron must first choose
-their ownership/quota identity; Codex will not invent a shared-user policy.
+Modern and legacy rejection tests cover missing, empty, and whitespace-only
+subjects. `uv run --locked python scripts/probe-mcp-subject.py` checks HTTP 401
+and that seeded anonymous records are not exposed. Valid-user isolation and
+auth-disabled operation are checked separately.
 
 ## Sources
 
