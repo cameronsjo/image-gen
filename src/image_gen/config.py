@@ -9,9 +9,9 @@ from image_gen.models import ProviderName
 
 
 class Settings(BaseSettings):
-    """All settings use the IMAGEGEN_ prefix."""
+    """Settings use IMAGEGEN_ except the explicit MCP allowlist aliases."""
 
-    model_config = {"env_prefix": "IMAGEGEN_"}
+    model_config = {"env_prefix": "IMAGEGEN_", "populate_by_name": True}
 
     # Provider API keys (all optional — at least one must be set for the service to start)
     google_api_key: str | None = Field(default=None, description="Google API key for Gemini")
@@ -58,6 +58,18 @@ class Settings(BaseSettings):
     auth_enabled: bool = Field(default=True, description="Enable authentication")
     oidc_issuer: str = Field(default="https://auth.sjo.lol", description="OIDC issuer URL")
     oidc_client_id: str = Field(default="image-gen", description="OIDC client identifier")
+
+    # FastMCP keeps localhost/loopback defaults; these extend them for proxies/LAN.
+    mcp_allowed_hosts: list[str] = Field(
+        default_factory=list,
+        validation_alias="MCP_ALLOWED_HOSTS",
+        description="Additional MCP Host allowlist (JSON array of hostnames)",
+    )
+    mcp_allowed_origins: list[str] = Field(
+        default_factory=list,
+        validation_alias="MCP_ALLOWED_ORIGINS",
+        description="Additional MCP Origin allowlist (JSON array of origins)",
+    )
 
     # Quota
     quota_max_tokens: int = Field(default=10, description="Maximum burst tokens for rate limiting")

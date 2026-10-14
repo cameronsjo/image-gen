@@ -1,30 +1,40 @@
 """FastMCP server instance creation."""
 
+import structlog
 from fastmcp import FastMCP
-from fastmcp.server.auth import JWTVerifier, OAuthProvider
+from fastmcp.server.auth import AccessToken, JWTVerifier
 
 from image_gen.config import Settings
+
+logger = structlog.get_logger()
+
+
+class SubjectJWTVerifier(JWTVerifier):
+    """Require an expiring authenticated ownership identity before dispatch."""
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        verified = await super().verify_token(token)
+        if verified is None:
+            logger.info("MCP JWT rejected", status=401, reason="jwt_verification_failed")
+            return None
+        if verified.expires_at is None:
+            logger.info("MCP JWT rejected", status=401, reason="missing_expiration")
+            return None
+        if not verified.subject or not verified.subject.strip():
+            logger.info("MCP JWT rejected", status=401, reason="missing_subject")
+            return None
+        return verified
 
 
 def create_mcp_server(settings: Settings) -> FastMCP:
     """Create a FastMCP server, optionally with JWT auth."""
     if settings.auth_enabled:
         jwks_uri = f"{settings.oidc_issuer}/jwks.json"
-        token_verifier = JWTVerifier(
+        auth = SubjectJWTVerifier(
             jwks_uri=jwks_uri,
             issuer=settings.oidc_issuer,
             audience=settings.oidc_client_id,
         )
-        # FastMCP's OAuthProvider is used here as a concrete carrier whose token
-        # verification we override directly; its stricter ABC surface and the
-        # patched attribute are a known typing gap in the FastMCP auth API.
-        auth = OAuthProvider(  # type: ignore[abstract]
-            base_url=settings.oidc_issuer,
-            issuer_url=settings.oidc_issuer,
-        )
-        # Override the token verifier on the auth provider
-        auth.token_verifier = token_verifier  # type: ignore[attr-defined]
-
         mcp = FastMCP(
             "image-gen",
             auth=auth,

@@ -1,8 +1,8 @@
 """MCP per-user scoping tests.
 
 Covers two things:
-  1. ``_resolve_user`` pulls identity from the access-token subject and falls
-     back to ``"anonymous"`` — never the old hardcoded ``"mcp-user"``.
+  1. ``_resolve_user`` pulls identity from the SDK access-token subject and falls
+     back to ``"anonymous"`` only with auth disabled, otherwise fails closed.
   2. The ``list_images`` and ``get_quota_status`` tools scope to the resolved
      user, so a caller only sees their own images and their own quota.
 
@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from asgi_lifespan import LifespanManager
 from fastmcp import Client, FastMCP
+from fastmcp.exceptions import ToolError
 
 from image_gen.app import create_app
 from image_gen.config import Settings
@@ -33,22 +34,36 @@ RESOLVE_TARGET = "image_gen.mcp.tools._resolve_user"
 
 
 def test_resolve_user_reads_token_subject() -> None:
-    ctx = SimpleNamespace(
-        request_context=SimpleNamespace(access_token=SimpleNamespace(sub="carol"))
-    )
-    assert _resolve_user(ctx) == "carol"
+    with patch(
+        "image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="carol")
+    ):
+        assert _resolve_user(auth_enabled=True) == "carol"
 
 
 def test_resolve_user_falls_back_to_anonymous() -> None:
-    assert _resolve_user(None) == "anonymous"
-    no_token = SimpleNamespace(request_context=SimpleNamespace(access_token=None))
-    assert _resolve_user(no_token) == "anonymous"
+    with patch("image_gen.mcp.tools.get_access_token", return_value=None):
+        assert _resolve_user(auth_enabled=False) == "anonymous"
+    with patch("image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="  ")):
+        assert _resolve_user(auth_enabled=False) == "anonymous"
+
+
+@pytest.mark.parametrize(
+    "token", [None, SimpleNamespace(subject=None), SimpleNamespace(subject=" ")]
+)
+def test_resolve_user_fails_closed_with_auth_enabled(token) -> None:
+    with (
+        patch("image_gen.mcp.tools.get_access_token", return_value=token),
+        pytest.raises(ToolError, match="verified user identity"),
+    ):
+        _resolve_user(auth_enabled=True)
 
 
 def test_resolve_user_never_returns_hardcoded_mcp_user() -> None:
-    ctx = SimpleNamespace(request_context=SimpleNamespace(access_token=SimpleNamespace(sub="dave")))
-    assert _resolve_user(ctx) == "dave"
-    assert _resolve_user(ctx) != "mcp-user"
+    with patch(
+        "image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="dave")
+    ):
+        assert _resolve_user(auth_enabled=True) == "dave"
+        assert _resolve_user(auth_enabled=True) != "mcp-user"
 
 
 # --- per-user scoping via the in-memory MCP client ----------------------------
@@ -79,6 +94,29 @@ async def mcp_env(tmp_path: Path) -> AsyncIterator[tuple[object, FastMCP]]:
             # Tools read the module-global app ref that the lifespan just set.
             mcp = create_mcp_server(settings)
             yield app, mcp
+
+
+@pytest.mark.parametrize("auth_enabled", [True, False])
+@pytest.mark.parametrize("tool", ["list_images", "get_quota_status"])
+async def test_tool_dispatch_without_verified_identity(mcp_env, auth_enabled, tool):
+    app, _ = mcp_env
+    await repository.create_generation(
+        app.state.db,
+        user_id="anonymous",
+        name="anonymous-private",
+        prompt="test",
+        aspect_ratio="1:1",
+        resolution="2K",
+    )
+    mcp = create_mcp_server(app.state.settings.model_copy(update={"auth_enabled": auth_enabled}))
+    async with Client(mcp) as client:
+        with patch("image_gen.mcp.tools.get_access_token", return_value=None):
+            if auth_enabled:
+                with pytest.raises(ToolError, match="verified user identity"):
+                    await client.call_tool(tool, {})
+            else:
+                result = _text(await client.call_tool(tool, {}))
+                assert ("anonymous-private" if tool == "list_images" else "10.0/10") in result
 
 
 async def test_list_images_scoped_to_resolved_user(mcp_env: tuple[object, FastMCP]) -> None:

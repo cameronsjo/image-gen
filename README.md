@@ -135,6 +135,66 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 
 ## MCP Tools
 
+### Breaking upgrade: configure LAN/Traefik allowlists first
+
+Upgrading to this SDK version enables strict Host/Origin protection on `/mcp`.
+Existing LAN or Traefik clients using a non-loopback public hostname will receive
+HTTP 403 unless that hostname is allowed. **Before upgrading**, set
+`MCP_ALLOWED_HOSTS` and matching `MCP_ALLOWED_ORIGINS` to JSON arrays, for example
+`MCP_ALLOWED_HOSTS='["images.example.lan"]'` and
+`MCP_ALLOWED_ORIGINS='["https://images.example.lan"]'`. These names do not use the
+`IMAGEGEN_` prefix; a comma-separated string is not a JSON array. Preserve the
+actual public scheme, hostname, and non-default origin port. This PR does not
+apply those deployment settings for you. Localhost/loopback access remains
+available; the SDK also permits the bound server address.
+
+401/403 rejections are logged at info with fixed reason labels (JWT validation,
+missing subject/expiry, authentication, Host, or Origin), never bearer tokens.
+
+Authenticated JWTs must contain a nonblank `sub` and an `exp` claim; otherwise
+the verifier returns HTTP 401 before tool dispatch. Tools also fail closed if
+authentication is enabled but no verified identity is available (including
+non-HTTP dispatch). Anonymous access remains available only when authentication
+is disabled. `uv run --locked python scripts/probe-mcp-subject.py`
+checks missing, empty, and whitespace-only subjects using test-only tokens and
+temporary data in both protocol eras.
+
+The `/mcp` endpoint uses stateless Streamable HTTP with JSON responses. FastMCP 4
+and Python MCP SDK 2 support protocol `2026-07-28`: modern requests carry their
+context in `_meta`, require no initialize handshake, and receive no session ID.
+Legacy clients can still initialize and call the same tools without a session ID.
+JWT verification retains the configured OIDC issuer and audience; tools scope
+images and quota to the SDK's verified token subject.
+
+The MCP mount always enables FastMCP's strict Host/Origin protection, independent
+of authentication. Localhost and loopback addresses work by default; the SDK
+also permits the bound server address. Host headers outside those defaults and
+the configured allowlist, and untrusted browser Origins, return HTTP 403.
+Non-browser clients may omit Origin. FastMCP's rejected-Host 421 is mapped to
+403 on this mount only.
+
+For LAN or Traefik access, explicitly extend the host and matching origin
+allowlists with JSON arrays (these two variables do **not** use `IMAGEGEN_`):
+
+```bash
+MCP_ALLOWED_HOSTS='["images.example.lan"]'
+MCP_ALLOWED_ORIGINS='["https://images.example.lan"]'
+```
+
+Use the actual public hostname and browser origin (scheme and non-default port,
+if any). Hosts are matched without their port by FastMCP; same-origin requests
+to an allowed host remain accepted. Keep proxy forwarding consistent with the
+public scheme/Host and do not use `*` to disable the allowlist. Explicit origins
+permit trusted proxy/browser origins, not arbitrary cross-origin sites; this is
+request protection, not CORS response permission. Localhost defaults remain
+available after adding LAN hosts. No deployment configuration is changed here.
+
+Run `uv run --locked python scripts/smoke-mcp.py` to start the real application
+and enumerate/call tools over localhost HTTP and SDK stdio in both protocol eras.
+The smoke test uses temporary storage and stubs provider discovery, so it does
+not require real API credentials or generate billable images. This is a POSIX
+developer check (macOS/Linux); the production entrypoint remains HTTP.
+
 - **`generate_image`** — Generate an image with a configured provider (50+ word prompt required). Optional `model` selects an identifier advertised by `/ready`; omitting it uses the provider's configured default. Unknown models are rejected before consuming quota, and the resolved model is saved with the generation and included in the tool result.
 - **`list_images`** — List recent generations with metadata
 - **`get_quota_status`** — Check rate limit quota

@@ -17,7 +17,7 @@ from image_gen.config import Settings
 from image_gen.db import engine, migrations
 from image_gen.mcp.server import create_mcp_server
 from image_gen.mcp.tools import set_app_ref
-from image_gen.middleware import RequestIDMiddleware
+from image_gen.middleware import MCPHostStatusMiddleware, RequestIDMiddleware
 from image_gen.services.quota import QuotaService
 from image_gen.services.registry import build_registry, discover_models
 from image_gen.services.storage import StorageService
@@ -164,9 +164,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Mount MCP server at /mcp — store the sub-app on state so the
     # lifespan can compose the MCP session manager lifecycle
     mcp = create_mcp_server(settings)
-    mcp_starlette = mcp.http_app(path="/")
+    mcp_starlette = mcp.http_app(
+        path="/",
+        stateless_http=True,
+        json_response=True,
+        host_origin_protection=True,
+        allowed_hosts=settings.mcp_allowed_hosts,
+        allowed_origins=settings.mcp_allowed_origins,
+    )
     app.state.mcp_app = mcp_starlette
-    app.mount("/mcp", mcp_starlette)
+    app.mount("/mcp", MCPHostStatusMiddleware(mcp_starlette))
 
     # Rewrite /mcp → /mcp/ so POST requests hit the mount directly
     # instead of getting a 307 trailing-slash redirect
