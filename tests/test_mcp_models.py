@@ -43,9 +43,9 @@ async def mcp_env(settings, mock_gemini_result):
 async def test_mcp_model_is_optional_in_tool_schema(mcp_env):
     _, client, _ = mcp_env
     tool = next(tool for tool in await client.list_tools() if tool.name == "generate_image")
-    assert "model" in tool.inputSchema["properties"]
-    assert "model" not in tool.inputSchema.get("required", [])
-    assert tool.inputSchema["properties"]["model"]["default"] is None
+    assert "model" in tool.input_schema["properties"]
+    assert "model" not in tool.input_schema.get("required", [])
+    assert tool.input_schema["properties"]["model"]["default"] is None
 
 
 @pytest.mark.parametrize(

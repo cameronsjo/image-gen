@@ -10,6 +10,7 @@ from typing import Annotated
 
 import structlog
 from fastmcp import Context, FastMCP
+from fastmcp.server.dependencies import get_access_token
 from pydantic import Field
 
 from image_gen.db import repository
@@ -33,16 +34,15 @@ _app_ref = None
 def _resolve_user(ctx: Context | None) -> str:
     """Resolve the calling user from the MCP context.
 
-    Reads the OAuth subject from the validated access token when present and
+    Reads the subject from the SDK's validated request-local access token and
     falls back to ``"anonymous"`` when no token is attached — mirroring the
     REST auth-disabled path so identities line up across the two surfaces.
     """
-    if ctx and ctx.request_context and hasattr(ctx.request_context, "access_token"):
-        token = ctx.request_context.access_token
-        if token and hasattr(token, "sub"):
-            sub = str(token.sub).strip()
-            if sub:
-                return sub
+    token = get_access_token()
+    if token and token.subject:
+        subject = token.subject.strip()
+        if subject:
+            return subject
     return "anonymous"
 
 

@@ -1,7 +1,7 @@
 """MCP per-user scoping tests.
 
 Covers two things:
-  1. ``_resolve_user`` pulls identity from the access-token subject and falls
+  1. ``_resolve_user`` pulls identity from the SDK access-token subject and falls
      back to ``"anonymous"`` — never the old hardcoded ``"mcp-user"``.
   2. The ``list_images`` and ``get_quota_status`` tools scope to the resolved
      user, so a caller only sees their own images and their own quota.
@@ -33,22 +33,25 @@ RESOLVE_TARGET = "image_gen.mcp.tools._resolve_user"
 
 
 def test_resolve_user_reads_token_subject() -> None:
-    ctx = SimpleNamespace(
-        request_context=SimpleNamespace(access_token=SimpleNamespace(sub="carol"))
-    )
-    assert _resolve_user(ctx) == "carol"
+    with patch(
+        "image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="carol")
+    ):
+        assert _resolve_user(None) == "carol"
 
 
 def test_resolve_user_falls_back_to_anonymous() -> None:
-    assert _resolve_user(None) == "anonymous"
-    no_token = SimpleNamespace(request_context=SimpleNamespace(access_token=None))
-    assert _resolve_user(no_token) == "anonymous"
+    with patch("image_gen.mcp.tools.get_access_token", return_value=None):
+        assert _resolve_user(None) == "anonymous"
+    with patch("image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="  ")):
+        assert _resolve_user(None) == "anonymous"
 
 
 def test_resolve_user_never_returns_hardcoded_mcp_user() -> None:
-    ctx = SimpleNamespace(request_context=SimpleNamespace(access_token=SimpleNamespace(sub="dave")))
-    assert _resolve_user(ctx) == "dave"
-    assert _resolve_user(ctx) != "mcp-user"
+    with patch(
+        "image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="dave")
+    ):
+        assert _resolve_user(None) == "dave"
+        assert _resolve_user(None) != "mcp-user"
 
 
 # --- per-user scoping via the in-memory MCP client ----------------------------

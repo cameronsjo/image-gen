@@ -4,6 +4,7 @@
 
 ### Features
 
+* **mcp:** upgrade to FastMCP 4.1.0 and Python MCP SDK 2.3.0, serve stateless Streamable HTTP, and retain modern/legacy HTTP and SDK stdio compatibility with verified per-request user identity.
 * **mcp:** accept an optional discovered model for image generation, persist the resolved model, and reject unknown models before consuming quota. Preserve ComfyUI's workflow checkpoint when using its configured default label.
 
 ## [0.1.8](https://github.com/cameronsjo/image-gen/compare/v0.1.7...v0.1.8) (2026-10-05)

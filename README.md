@@ -135,6 +135,25 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 
 ## MCP Tools
 
+This SDK-upgrade checkpoint is held: otherwise valid JWTs without a nonblank
+subject can reach the shared anonymous scope. The proposed 401 rejection policy
+requires Cameron's security decision; see `docs/plans/2026-10-14-mcp-sdk-upgrade.md`.
+`uv run --locked python scripts/probe-mcp-subject.py` reproduces the failure with
+test-only tokens and temporary data. Do not deploy this checkpoint.
+
+The `/mcp` endpoint uses stateless Streamable HTTP with JSON responses. FastMCP 4
+and Python MCP SDK 2 support protocol `2026-07-28`: modern requests carry their
+context in `_meta`, require no initialize handshake, and receive no session ID.
+Legacy clients can still initialize and call the same tools without a session ID.
+JWT verification retains the configured OIDC issuer and audience; tools scope
+images and quota to the SDK's verified token subject.
+
+Run `uv run --locked python scripts/smoke-mcp.py` to start the real application
+and enumerate/call tools over localhost HTTP and SDK stdio in both protocol eras.
+The smoke test uses temporary storage and stubs provider discovery, so it does
+not require real API credentials or generate billable images. This is a POSIX
+developer check (macOS/Linux); the production entrypoint remains HTTP.
+
 - **`generate_image`** — Generate an image with a configured provider (50+ word prompt required). Optional `model` selects an identifier advertised by `/ready`; omitting it uses the provider's configured default. Unknown models are rejected before consuming quota, and the resolved model is saved with the generation and included in the tool result.
 - **`list_images`** — List recent generations with metadata
 - **`get_quota_status`** — Check rate limit quota

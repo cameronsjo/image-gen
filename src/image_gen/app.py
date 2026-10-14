@@ -164,7 +164,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Mount MCP server at /mcp — store the sub-app on state so the
     # lifespan can compose the MCP session manager lifecycle
     mcp = create_mcp_server(settings)
-    mcp_starlette = mcp.http_app(path="/")
+    mcp_starlette = mcp.http_app(path="/", stateless_http=True, json_response=True)
     app.state.mcp_app = mcp_starlette
     app.mount("/mcp", mcp_starlette)
 
