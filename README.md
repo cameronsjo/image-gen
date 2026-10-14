@@ -135,7 +135,7 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 
 ## MCP Tools
 
-- **`generate_image`** — Generate an image with Gemini 3 Pro (50+ word prompt required)
+- **`generate_image`** — Generate an image with a configured provider (50+ word prompt required). Optional `model` selects an identifier advertised by `/ready`; omitting it uses the provider's configured default. Unknown models are rejected before consuming quota, and the resolved model is saved with the generation and included in the tool result.
 - **`list_images`** — List recent generations with metadata
 - **`get_quota_status`** — Check rate limit quota
 

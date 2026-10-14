@@ -3,6 +3,11 @@
 **Date:** 2026-06-28
 **Status:** Accepted
 
+**Updated by:** [PR #34](https://github.com/cameronsjo/image-gen/pull/34) extends model
+selection to the MCP `generate_image` tool, with optional model input, fail-closed
+discovery validation, and persistence of the resolved model. The original MCP
+deferral below is historical; existing rows may still have `model=None`.
+
 ## Context
 
 ADR 0002 made the image-generation *provider* selectable per request, but each
