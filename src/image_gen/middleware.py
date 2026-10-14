@@ -18,6 +18,25 @@ logger = structlog.get_logger()
 _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 
 
+class MCPHostStatusMiddleware:
+    """Expose the SDK's rejected-Host status (421) as the required HTTP 403.
+
+    Mounted around only the protected MCP sub-app; header validation stays in
+    FastMCP's strict Host/Origin guard rather than a second custom allowlist.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def send_forbidden_host(message: Message) -> None:
+            if message["type"] == "http.response.start" and message["status"] == 421:
+                message = {**message, "status": 403}
+            await send(message)
+
+        await self.app(scope, receive, send_forbidden_host)
+
+
 class RequestIDMiddleware:
     """Attach a request-ID to every HTTP request for log correlation.
 

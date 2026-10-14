@@ -72,3 +72,22 @@ and schema tests. PR #33's sizing refactor does not overlap the SDK upgrade.
 - Live issuer/JWKS access, paid-provider calls, merge, and deployment were not
   performed. Provider discovery and signing material are test-only.
 - `CHANGELOG.md` matches main; release-please owns generated release entries.
+
+## Round 3 approved security follow-ups
+
+Cameron authorized these in `brief-fix3.md`; scope remains PR #36, without
+merge/deployment or history rewriting.
+
+- [x] Merge freshly fetched main after PR #34 merged, leaving an SDK-only diff.
+- [x] Fail closed in tools when auth is enabled but verified identity is absent;
+  retain anonymous access only with auth disabled and test both dispatch modes.
+- [x] Require `exp` in authenticated JWTs, in addition to nonblank `sub`.
+- [x] Enable strict MCP Host/Origin protection with loopback defaults and
+  `MCP_ALLOWED_HOSTS` / `MCP_ALLOWED_ORIGINS` JSON-array allowlists for LAN/proxy
+  access. Map the SDK's rejected-Host 421 to the requested 403 and document it.
+- [x] Run subject rejection tests on `tools/call` as well as `tools/list` in CI.
+- [ ] Complete final security review, quality gates, push and current-head CI;
+  write `report-fix3.md` and stop.
+
+The review finding that PR #36 bundled PR #34 is declined: merging current main
+after #34 landed removes those feature changes from the net SDK diff.

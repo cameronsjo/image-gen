@@ -7,11 +7,16 @@ from image_gen.config import Settings
 
 
 class SubjectJWTVerifier(JWTVerifier):
-    """Require an authenticated ownership identity before tool dispatch."""
+    """Require an expiring authenticated ownership identity before dispatch."""
 
     async def verify_token(self, token: str) -> AccessToken | None:
         verified = await super().verify_token(token)
-        if verified is None or not verified.subject or not verified.subject.strip():
+        if (
+            verified is None
+            or verified.expires_at is None
+            or not verified.subject
+            or not verified.subject.strip()
+        ):
             return None
         return verified
 

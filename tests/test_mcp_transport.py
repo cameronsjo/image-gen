@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from mcp.types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
 
 from image_gen.app import create_app
+from image_gen.config import Settings
 from image_gen.db import repository
 from image_gen.mcp.server import SubjectJWTVerifier
 
@@ -110,7 +111,7 @@ async def authenticated_client(settings):
                 )
             await app.state.quota.consume_token("alice")
             async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
+                transport=ASGITransport(app=app), base_url="http://localhost"
             ) as client:
                 yield client, settings
 
@@ -124,6 +125,8 @@ def _token(settings, *, user="alice", **overrides):
     if user is not None:
         claims["sub"] = user
     claims.update(overrides)
+    if claims.get("exp") is None:
+        claims.pop("exp", None)
     return jwt.encode(claims, SIGNING_KEY, algorithm="HS256")
 
 
@@ -151,6 +154,7 @@ async def test_verified_subject_scopes_images_and_quota(authenticated_client, mo
 
 
 @pytest.mark.parametrize("modern", [True, False])
+@pytest.mark.parametrize("method", ["tools/list", "tools/call"])
 @pytest.mark.parametrize(
     "invalid",
     [
@@ -159,12 +163,13 @@ async def test_verified_subject_scopes_images_and_quota(authenticated_client, mo
         "issuer",
         "audience",
         "expired",
+        "expiry-missing",
         "subject-missing",
         "subject-empty",
         "subject-whitespace",
     ],
 )
-async def test_invalid_jwt_rejected_before_tool_listing(authenticated_client, modern, invalid):
+async def test_invalid_jwt_rejected_before_dispatch(authenticated_client, modern, method, invalid):
     client, settings = authenticated_client
     tokens = {
         "missing": None,
@@ -172,14 +177,85 @@ async def test_invalid_jwt_rejected_before_tool_listing(authenticated_client, mo
         "issuer": _token(settings, iss="https://wrong-issuer.test"),
         "audience": _token(settings, aud="wrong-audience"),
         "expired": _token(settings, exp=int(time.time()) - 60),
+        "expiry-missing": _token(settings, exp=None),
         "subject-missing": _token(settings, user=None),
         "subject-empty": _token(settings, user=""),
         "subject-whitespace": _token(settings, user=" \t "),
     }
     response = await client.post(
         "/mcp",
-        json=_request("tools/list", modern=modern),
-        headers=_headers("tools/list", modern=modern, token=tokens[invalid]),
+        json=_request(
+            method,
+            {"name": "list_images", "arguments": {}} if method == "tools/call" else {},
+            modern=modern,
+        ),
+        headers=_headers(method, modern=modern, name="list_images", token=tokens[invalid]),
     )
     assert response.status_code == 401, response.text
     assert "WWW-Authenticate" in response.headers
+
+
+@pytest.mark.parametrize("modern", [True, False])
+@pytest.mark.parametrize(
+    "extra_headers, expected_status",
+    [
+        ({"Host": "localhost", "Origin": "http://localhost"}, 200),
+        ({"Host": "127.0.0.1:8000"}, 200),
+        ({"Host": "[::1]:8000"}, 200),
+        ({"Host": "attacker.example"}, 403),
+        ({"Host": "attacker.example", "Origin": "http://attacker.example"}, 403),
+        ({"Host": "localhost", "Origin": "https://attacker.example"}, 403),
+    ],
+)
+async def test_default_mcp_host_origin_protection(client, modern, extra_headers, expected_status):
+    response = await client.post(
+        "/mcp",
+        json=_request("tools/list", modern=modern),
+        headers={**_headers("tools/list", modern=modern), **extra_headers},
+    )
+    assert response.status_code == expected_status, response.text
+    if expected_status == 200:
+        assert {tool["name"] for tool in response.json()["result"]["tools"]} == TOOL_NAMES
+    else:
+        assert '"tools"' not in response.text
+
+
+@pytest.mark.parametrize("modern", [True, False])
+async def test_mcp_env_allowlist_for_proxy(settings, monkeypatch, modern):
+    monkeypatch.setenv("MCP_ALLOWED_HOSTS", '["images.lan"]')
+    monkeypatch.setenv("MCP_ALLOWED_ORIGINS", '["https://images.lan"]')
+    configured = Settings(
+        google_api_key="test-only", auth_enabled=False, data_dir=settings.data_dir
+    )
+    assert configured.mcp_allowed_hosts == ["images.lan"]
+    assert configured.mcp_allowed_origins == ["https://images.lan"]
+    with (
+        patch("image_gen.services.gemini.genai.Client", return_value=MagicMock()),
+        patch(
+            "image_gen.services.gemini.GeminiProvider.list_models",
+            new=AsyncMock(return_value=[configured.gemini_model]),
+        ),
+    ):
+        app = create_app(configured)
+        async with (
+            LifespanManager(app),
+            AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://localhost"
+            ) as proxy_client,
+        ):
+            for host, origin, expected in (
+                ("images.lan", "https://images.lan", 200),
+                ("localhost", "http://localhost", 200),
+                ("attacker.example", "https://images.lan", 403),
+                ("images.lan", "https://attacker.example", 403),
+            ):
+                response = await proxy_client.post(
+                    "/mcp",
+                    json=_request("tools/list", modern=modern),
+                    headers={
+                        **_headers("tools/list", modern=modern),
+                        "Host": host,
+                        "Origin": origin,
+                    },
+                )
+                assert response.status_code == expected, response.text

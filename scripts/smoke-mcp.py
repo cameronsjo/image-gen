@@ -19,6 +19,7 @@ import uvicorn
 from asgi_lifespan import LifespanManager
 from fastmcp import Client
 from fastmcp.client.transports import StdioTransport
+from mcp.types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
 
 from image_gen.app import create_app
 from image_gen.config import Settings
@@ -108,6 +109,33 @@ async def smoke() -> None:
                                 await asyncio.sleep(0.25)
                 for mode in ("2026-07-28", "legacy"):
                     await list_tools(f"{url}/mcp", mode, "HTTP")
+                async with httpx.AsyncClient(trust_env=False, timeout=10) as http:
+                    for rejected_header in (
+                        {"Host": "attacker.example"},
+                        {"Origin": "https://attacker.example"},
+                    ):
+                        response = await http.post(
+                            f"{url}/mcp",
+                            json={
+                                "jsonrpc": "2.0",
+                                "id": 1,
+                                "method": "tools/list",
+                                "params": {
+                                    "_meta": {
+                                        PROTOCOL_VERSION_META_KEY: "2026-07-28",
+                                        CLIENT_CAPABILITIES_META_KEY: {},
+                                    }
+                                },
+                            },
+                            headers={
+                                "Accept": "application/json, text/event-stream",
+                                "MCP-Protocol-Version": "2026-07-28",
+                                "Mcp-Method": "tools/list",
+                                **rejected_header,
+                            },
+                        )
+                        assert response.status_code == 403, response.text
+                    print("HTTP: rejected hostile Host and Origin with 403")
             finally:
                 process.terminate()
                 try:

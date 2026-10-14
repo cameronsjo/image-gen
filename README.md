@@ -135,9 +135,11 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 
 ## MCP Tools
 
-Authenticated JWTs must contain a nonblank `sub`; otherwise the verifier returns
-HTTP 401 before tool dispatch. Anonymous access remains available only when
-authentication is disabled. `uv run --locked python scripts/probe-mcp-subject.py`
+Authenticated JWTs must contain a nonblank `sub` and an `exp` claim; otherwise
+the verifier returns HTTP 401 before tool dispatch. Tools also fail closed if
+authentication is enabled but no verified identity is available (including
+non-HTTP dispatch). Anonymous access remains available only when authentication
+is disabled. `uv run --locked python scripts/probe-mcp-subject.py`
 checks missing, empty, and whitespace-only subjects using test-only tokens and
 temporary data in both protocol eras.
 
@@ -147,6 +149,27 @@ context in `_meta`, require no initialize handshake, and receive no session ID.
 Legacy clients can still initialize and call the same tools without a session ID.
 JWT verification retains the configured OIDC issuer and audience; tools scope
 images and quota to the SDK's verified token subject.
+
+The MCP mount always enables FastMCP's strict Host/Origin protection, independent
+of authentication. Localhost and loopback addresses work by default; other
+Host headers and untrusted browser Origins return HTTP 403. Non-browser clients
+may omit Origin. FastMCP's rejected-Host 421 is mapped to 403 on this mount only.
+
+For LAN or Traefik access, explicitly extend the host and matching origin
+allowlists with JSON arrays (these two variables do **not** use `IMAGEGEN_`):
+
+```bash
+MCP_ALLOWED_HOSTS='["images.example.lan"]'
+MCP_ALLOWED_ORIGINS='["https://images.example.lan"]'
+```
+
+Use the actual public hostname and browser origin (scheme and non-default port,
+if any). Hosts are matched without their port by FastMCP; same-origin requests
+to an allowed host remain accepted. Keep proxy forwarding consistent with the
+public scheme/Host and do not use `*` to disable the allowlist. Explicit origins
+permit trusted proxy/browser origins, not arbitrary cross-origin sites; this is
+request protection, not CORS response permission. Localhost defaults remain
+available after adding LAN hosts. No deployment configuration is changed here.
 
 Run `uv run --locked python scripts/smoke-mcp.py` to start the real application
 and enumerate/call tools over localhost HTTP and SDK stdio in both protocol eras.

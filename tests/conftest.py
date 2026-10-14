@@ -60,5 +60,5 @@ async def client(settings: Settings, mock_gemini_result: ProviderResult) -> Asyn
                 return_value=mock_gemini_result
             )
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            async with AsyncClient(transport=transport, base_url="http://localhost") as ac:
                 yield ac
