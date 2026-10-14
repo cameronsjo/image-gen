@@ -98,3 +98,22 @@ coverage), lint/format, mypy, rejection probe, package build/source consistency,
 and real-socket Host/Origin plus modern/legacy HTTP/stdio smoke. The reviewer
 independently reran all 66 focused tests and the real smoke. Live issuer/JWKS,
 paid providers, merge and deployment remain outside the verified boundary.
+
+## Round 4 approved migration metadata and cleanup
+
+Cameron requested these in `brief-fix4.md` on the same PR branch, after merging
+fresh main without rebasing:
+
+- [x] Explicit README breaking-upgrade warning: configure LAN/Traefik host and
+  matching origin allowlists as JSON arrays before upgrading.
+- [x] Log MCP 401/403 rejection reasons at info without bearer tokens or claims.
+- [x] Remove unused `ctx` parameters from identity resolution and tools.
+- [x] Land a `BREAKING CHANGE:` footer and `feat(mcp)!:` PR title; push this
+  branch and record final-head checks/delivery in external `report-fix4.md`.
+
+Round-4 independent code/security review completed with no supported findings,
+72 focused tests passed and exposed tool schemas unchanged. Codex ran all 308
+tests (90.06% coverage), lint/format, mypy, the subject probe, real HTTP/stdio
+and hostile-header smoke, and a package build whose Python files and README
+metadata match the tested source. The six new reason-logging tests all failed
+against the prior committed verifier/middleware in an isolated process.

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 import structlog
-from fastmcp import Context, FastMCP
+from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token
 from pydantic import Field
@@ -32,8 +32,8 @@ logger = structlog.get_logger()
 _app_ref = None
 
 
-def _resolve_user(ctx: Context | None, *, auth_enabled: bool) -> str:
-    """Resolve the calling user from the MCP context.
+def _resolve_user(*, auth_enabled: bool) -> str:
+    """Resolve the calling user from the SDK's request-local token.
 
     Reads the subject from the SDK's validated request-local access token and
     rejects a missing identity when this server requires authentication.
@@ -106,7 +106,6 @@ def register(mcp: FastMCP) -> None:
                 description="Model identifier from /ready; omit to use the provider's default",
             ),
         ] = None,
-        ctx: Context | None = None,
     ) -> str:
         """Generate an image using a configured provider.
 
@@ -158,7 +157,7 @@ def register(mcp: FastMCP) -> None:
         model = model or selected_provider.model_name
 
         # Resolve the calling user from the MCP context (no hardcoded identity).
-        user_id = _resolve_user(ctx, auth_enabled=auth_enabled)
+        user_id = _resolve_user(auth_enabled=auth_enabled)
 
         # Rate limit
         if not await quota.consume_token(user_id):
@@ -240,7 +239,6 @@ def register(mcp: FastMCP) -> None:
         limit: Annotated[
             int, Field(default=20, description="Maximum number of images to return")
         ] = 20,
-        ctx: Context | None = None,
     ) -> str:
         """List your recent image generations with their metadata."""
         if _app_ref is None:
@@ -251,7 +249,7 @@ def register(mcp: FastMCP) -> None:
         if missing:
             return f"Service not initialized — missing: {', '.join(missing)}"
 
-        user_id = _resolve_user(ctx, auth_enabled=auth_enabled)
+        user_id = _resolve_user(auth_enabled=auth_enabled)
 
         try:
             records = await repository.list_generations(app.state.db, user_id=user_id, limit=limit)
@@ -277,7 +275,7 @@ def register(mcp: FastMCP) -> None:
         return "\n".join(lines)
 
     @mcp.tool
-    async def get_quota_status(ctx: Context | None = None) -> str:
+    async def get_quota_status() -> str:
         """Check your current rate limit quota for image generation."""
         if _app_ref is None:
             return "Service not initialized"
@@ -287,7 +285,7 @@ def register(mcp: FastMCP) -> None:
         if missing:
             return f"Service not initialized — missing: {', '.join(missing)}"
 
-        user_id = _resolve_user(ctx, auth_enabled=auth_enabled)
+        user_id = _resolve_user(auth_enabled=auth_enabled)
 
         try:
             status = await app.state.quota.get_status(user_id)

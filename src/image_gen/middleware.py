@@ -29,9 +29,29 @@ class MCPHostStatusMiddleware:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        rejection_status: int | None = None
+
         async def send_forbidden_host(message: Message) -> None:
-            if message["type"] == "http.response.start" and message["status"] == 421:
-                message = {**message, "status": 403}
+            nonlocal rejection_status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+                if status == 421:
+                    logger.info("MCP request rejected", status=403, reason="invalid_host")
+                    message = {**message, "status": 403}
+                elif status == 401:
+                    logger.info("MCP request rejected", status=401, reason="authentication_failed")
+                elif status == 403:
+                    rejection_status = status
+            elif message["type"] == "http.response.body" and rejection_status is not None:
+                # Recognize the SDK's fixed guard response, never log arbitrary
+                # response bodies, headers, claims, or bearer-token material.
+                reason = (
+                    "invalid_origin"
+                    if message.get("body") == b"Forbidden Origin"
+                    else "access_forbidden"
+                )
+                logger.info("MCP request rejected", status=rejection_status, reason=reason)
+                rejection_status = None
             await send(message)
 
         await self.app(scope, receive, send_forbidden_host)

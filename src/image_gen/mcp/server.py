@@ -1,9 +1,12 @@
 """FastMCP server instance creation."""
 
+import structlog
 from fastmcp import FastMCP
 from fastmcp.server.auth import AccessToken, JWTVerifier
 
 from image_gen.config import Settings
+
+logger = structlog.get_logger()
 
 
 class SubjectJWTVerifier(JWTVerifier):
@@ -11,12 +14,14 @@ class SubjectJWTVerifier(JWTVerifier):
 
     async def verify_token(self, token: str) -> AccessToken | None:
         verified = await super().verify_token(token)
-        if (
-            verified is None
-            or verified.expires_at is None
-            or not verified.subject
-            or not verified.subject.strip()
-        ):
+        if verified is None:
+            logger.info("MCP JWT rejected", status=401, reason="jwt_verification_failed")
+            return None
+        if verified.expires_at is None:
+            logger.info("MCP JWT rejected", status=401, reason="missing_expiration")
+            return None
+        if not verified.subject or not verified.subject.strip():
+            logger.info("MCP JWT rejected", status=401, reason="missing_subject")
             return None
         return verified
 

@@ -37,14 +37,14 @@ def test_resolve_user_reads_token_subject() -> None:
     with patch(
         "image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="carol")
     ):
-        assert _resolve_user(None, auth_enabled=True) == "carol"
+        assert _resolve_user(auth_enabled=True) == "carol"
 
 
 def test_resolve_user_falls_back_to_anonymous() -> None:
     with patch("image_gen.mcp.tools.get_access_token", return_value=None):
-        assert _resolve_user(None, auth_enabled=False) == "anonymous"
+        assert _resolve_user(auth_enabled=False) == "anonymous"
     with patch("image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="  ")):
-        assert _resolve_user(None, auth_enabled=False) == "anonymous"
+        assert _resolve_user(auth_enabled=False) == "anonymous"
 
 
 @pytest.mark.parametrize(
@@ -55,15 +55,15 @@ def test_resolve_user_fails_closed_with_auth_enabled(token) -> None:
         patch("image_gen.mcp.tools.get_access_token", return_value=token),
         pytest.raises(ToolError, match="verified user identity"),
     ):
-        _resolve_user(None, auth_enabled=True)
+        _resolve_user(auth_enabled=True)
 
 
 def test_resolve_user_never_returns_hardcoded_mcp_user() -> None:
     with patch(
         "image_gen.mcp.tools.get_access_token", return_value=SimpleNamespace(subject="dave")
     ):
-        assert _resolve_user(None, auth_enabled=True) == "dave"
-        assert _resolve_user(None, auth_enabled=True) != "mcp-user"
+        assert _resolve_user(auth_enabled=True) == "dave"
+        assert _resolve_user(auth_enabled=True) != "mcp-user"
 
 
 # --- per-user scoping via the in-memory MCP client ----------------------------

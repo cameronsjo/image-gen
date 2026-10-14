@@ -195,6 +195,44 @@ async def test_invalid_jwt_rejected_before_dispatch(authenticated_client, modern
     assert "WWW-Authenticate" in response.headers
 
 
+@pytest.mark.parametrize(
+    "case, status, reason",
+    [
+        ("subject", 401, "missing_subject"),
+        ("expiry", 401, "missing_expiration"),
+        ("malformed", 401, "jwt_verification_failed"),
+        ("missing", 401, "authentication_failed"),
+        ("host", 403, "invalid_host"),
+        ("origin", 403, "invalid_origin"),
+    ],
+)
+async def test_mcp_rejections_log_reason_without_token(authenticated_client, case, status, reason):
+    client, settings = authenticated_client
+    tokens = {
+        "subject": _token(settings, user=None),
+        "expiry": _token(settings, exp=None),
+        "malformed": "invalid-jwt-do-not-log",
+        "missing": None,
+    }
+    token = tokens.get(case, _token(settings))
+    headers = _headers("tools/list", token=token)
+    if case == "host":
+        headers["Host"] = "attacker.example"
+    if case == "origin":
+        headers["Origin"] = "https://attacker.example"
+    with (
+        patch("image_gen.middleware.logger") as http_log,
+        patch("image_gen.mcp.server.logger") as jwt_log,
+    ):
+        response = await client.post("/mcp", json=_request("tools/list"), headers=headers)
+    assert response.status_code == status, response.text
+    calls = http_log.info.call_args_list + jwt_log.info.call_args_list
+    assert any(call.kwargs.get("reason") == reason for call in calls), calls
+    assert all(call.kwargs.get("status") == status for call in calls), calls
+    if token:
+        assert token not in repr(calls)
+
+
 @pytest.mark.parametrize("modern", [True, False])
 @pytest.mark.parametrize(
     "extra_headers, expected_status",

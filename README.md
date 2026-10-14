@@ -135,6 +135,22 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 
 ## MCP Tools
 
+### Breaking upgrade: configure LAN/Traefik allowlists first
+
+Upgrading to this SDK version enables strict Host/Origin protection on `/mcp`.
+Existing LAN or Traefik clients using a non-loopback public hostname will receive
+HTTP 403 unless that hostname is allowed. **Before upgrading**, set
+`MCP_ALLOWED_HOSTS` and matching `MCP_ALLOWED_ORIGINS` to JSON arrays, for example
+`MCP_ALLOWED_HOSTS='["images.example.lan"]'` and
+`MCP_ALLOWED_ORIGINS='["https://images.example.lan"]'`. These names do not use the
+`IMAGEGEN_` prefix; a comma-separated string is not a JSON array. Preserve the
+actual public scheme, hostname, and non-default origin port. This PR does not
+apply those deployment settings for you. Localhost/loopback access remains
+available; the SDK also permits the bound server address.
+
+401/403 rejections are logged at info with fixed reason labels (JWT validation,
+missing subject/expiry, authentication, Host, or Origin), never bearer tokens.
+
 Authenticated JWTs must contain a nonblank `sub` and an `exp` claim; otherwise
 the verifier returns HTTP 401 before tool dispatch. Tools also fail closed if
 authentication is enabled but no verified identity is available (including
