@@ -19,7 +19,7 @@ No merge, deployment, credentials, or paid generations are authorized.
 - [x] Run the full test suite, lint, format, type checking, and package build.
 - [x] Independently review the final change.
 - [x] Resolve the subjectless-JWT security policy with Cameron before publishing a PR.
-- [ ] Open a ready PR after the policy is resolved; record CI results in report.md.
+- [x] Open a ready PR after the policy is resolved; record final CI results in report-fix2.md.
 
 ## Approved security decision
 
@@ -59,3 +59,16 @@ auth-disabled operation are checked separately.
 
 The SDK PR includes PR #34's commit because the upgrade touches the MCP tools
 and schema tests. PR #33's sizing refactor does not overlap the SDK upgrade.
+
+## Delivery evidence
+
+- Ready PR: https://github.com/cameronsjo/image-gen/pull/36 (left open).
+- Fix commit: `9ba9981`, following the pushed `wip: broken` checkpoint and merges
+  of current main (PR #33) and the overlapping PR #34 branch. No history rewritten.
+- Final source checks: 261 tests, 89.76% coverage; lint, format, types, build,
+  six rejection probes, and real modern/legacy HTTP and stdio smoke all passed.
+- Independent read-only code/security review found no supported remaining
+  defects; it independently reran the 20 transport tests and six rejection probes.
+- Live issuer/JWKS access, paid-provider calls, merge, and deployment were not
+  performed. Provider discovery and signing material are test-only.
+- `CHANGELOG.md` matches main; release-please owns generated release entries.
