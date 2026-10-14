@@ -33,8 +33,8 @@ _DIVISOR = 16
 _MAX_DIM = 3840  # max for any single dimension (OpenAI and OpenRouter share this limit)
 
 
-def compute_size(aspect_ratio: str, base: int, provider_name: str) -> str:
-    """Return a ``WxH`` size string for *aspect_ratio* scaled so the long edge is *base*.
+def compute_dimensions(aspect_ratio: str, base: int, provider_name: str) -> tuple[int, int]:
+    """Return integer ``(width, height)`` dimensions with the long edge set to *base*.
 
     Width and height are floored to a multiple of 16 and capped at ``_MAX_DIM`` per
     axis. The long edge is capped first and the short edge is always <= the long edge,
@@ -63,4 +63,10 @@ def compute_size(aspect_ratio: str, base: int, provider_name: str) -> str:
         width = math.floor(height * w_parts / h_parts / _DIVISOR) * _DIVISOR
         width = max(width, _DIVISOR)
 
+    return width, height
+
+
+def compute_size(aspect_ratio: str, base: int, provider_name: str) -> str:
+    """Format :func:`compute_dimensions` as the ``WxH`` string cloud providers expect."""
+    width, height = compute_dimensions(aspect_ratio, base, provider_name)
     return f"{width}x{height}"
