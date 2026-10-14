@@ -96,6 +96,12 @@ def register(mcp: FastMCP) -> None:
                 description="Image generation provider: gemini, openai, openrouter, or comfyui",
             ),
         ] = "gemini",
+        model: Annotated[
+            str | None,
+            Field(
+                description="Model identifier from /ready; omit to use the provider's default",
+            ),
+        ] = None,
         ctx: Context | None = None,
     ) -> str:
         """Generate an image using a configured provider.
@@ -135,6 +141,18 @@ def register(mcp: FastMCP) -> None:
             return f"Unknown or unconfigured provider {provider!r}. Available: {available}"
         selected_provider = registry[provider]
 
+        # Match REST model selection: discovery failure permits only the configured
+        # default. Reject an unknown explicit model before quota or DB side effects.
+        provider_models = getattr(app.state, "provider_models", {})
+        available_models = provider_models.get(provider, []) or [selected_provider.model_name]
+        if model and model not in available_models:
+            available = ", ".join(available_models)
+            return (
+                f"Model {model!r} is not available for provider {provider!r}. "
+                f"Available: {available}"
+            )
+        model = model or selected_provider.model_name
+
         # Resolve the calling user from the MCP context (no hardcoded identity).
         user_id = _resolve_user(ctx)
 
@@ -158,6 +176,7 @@ def register(mcp: FastMCP) -> None:
             aspect_ratio=aspect_ratio,
             resolution=resolution,
             provider=provider,
+            model=model,
         )
         await repository.update_generation(db, record.id, status=GenerationStatus.GENERATING)
 
@@ -166,6 +185,7 @@ def register(mcp: FastMCP) -> None:
                 prompt=prompt,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
+                model=model,
             )
             file_path = await storage.save_image(result.image_data, record.id)
             file_size = len(result.image_data)
@@ -187,6 +207,7 @@ def register(mcp: FastMCP) -> None:
                 f"ID: {record.id}\n"
                 f"Name: {name}\n"
                 f"Provider: {provider}\n"
+                f"Model: {model}\n"
                 f"File size: {file_size:,} bytes\n"
                 f"{cost_line}"
                 f"Path: {file_path}"

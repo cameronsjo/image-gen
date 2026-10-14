@@ -160,9 +160,10 @@ class ComfyUIProvider(ImageProvider):
 
         *model*, when given, overrides the bundled template's ``unet_name`` (one
         of the ``list_models()`` choices, e.g. ``"flux1-schnell.safetensors"``).
-        ``None`` leaves the template's own default checkpoint untouched — the
-        configured ``comfyui_model`` is informational only (see ``config.py``)
-        and is never itself a valid ``unet_name``, so it must not be injected.
+        ``None`` or the configured ``comfyui_model`` label leaves the template's
+        own default checkpoint untouched. That label is informational only (see
+        ``config.py``), so it must not be injected as a ``unet_name`` when an
+        entry point resolves an omitted model to the provider's default name.
 
         Malformed template input — invalid JSON or a non-object top level (e.g. an
         operator pointing ``comfyui_workflow`` at a UI-format export) — surfaces as
@@ -190,7 +191,7 @@ class ComfyUIProvider(ImageProvider):
             sampler["inputs"]["seed"] = random.getrandbits(63)
             sampler["inputs"]["steps"] = self._steps
 
-            if model is not None:
+            if model is not None and model != self._model:
                 unet_loader = _find_node(graph, "UNETLoader")
                 unet_loader["inputs"]["unet_name"] = model
         except ProviderError as e:
@@ -215,7 +216,8 @@ class ComfyUIProvider(ImageProvider):
 
         *model*, when given, must be one of the ``unet_name`` choices from
         :meth:`list_models` and overrides the bundled workflow's checkpoint.
-        ``None`` uses the template's own default (FLUX.1-schnell).
+        ``None`` or the configured informational model label uses the template's
+        own default (FLUX.1-schnell).
 
         Wraps the full submit → poll → fetch flow in :func:`asyncio.timeout` so a
         hung server (or a never-completing job) surfaces as a timeout rather than
