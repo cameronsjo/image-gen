@@ -42,14 +42,14 @@ import structlog
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
-from image_gen.services._sizing import compute_size
+from image_gen.services._sizing import compute_dimensions
 from image_gen.services.provider import ImageProvider, ProviderResult
 
 logger = structlog.get_logger()
 
 # Canonical resolution → long-edge pixel target.  4K is intentionally absent:
 # local FLUX is happiest <= 2K, so we raise UnsupportedParameterError rather than
-# pretend.  compute_size() floors to multiples of 16 (FLUX-friendly).
+# pretend.  compute_dimensions() floors to multiples of 16 (FLUX-friendly).
 _RESOLUTION_BASE: dict[str, int] = {
     "1K": 1024,
     "2K": 2048,
@@ -68,8 +68,8 @@ _BUNDLED_WORKFLOW = "flux_schnell.json"
 def _compute_dimensions(aspect_ratio: str, resolution: str) -> tuple[int, int]:
     """Return ``(width, height)`` integers for the latent node.
 
-    Reuses the shared :func:`compute_size` math (long edge = base, floored to a
-    multiple of 16) and parses its ``WxH`` string back into integers.
+    Reuses the shared :func:`compute_dimensions` math (long edge = base, floored
+    to a multiple of 16) directly, without a string-formatting round trip.
 
     Raises:
         UnsupportedParameterError: For ``4K`` (above local FLUX's sweet spot), an
@@ -81,9 +81,7 @@ def _compute_dimensions(aspect_ratio: str, resolution: str) -> tuple[int, int]:
     if resolution not in _RESOLUTION_BASE:
         msg = f"ComfyUI provider does not recognise resolution {resolution!r}"
         raise UnsupportedParameterError(msg)
-    size = compute_size(aspect_ratio, _RESOLUTION_BASE[resolution], "ComfyUI")
-    width, height = (int(part) for part in size.split("x"))
-    return width, height
+    return compute_dimensions(aspect_ratio, _RESOLUTION_BASE[resolution], "ComfyUI")
 
 
 def _node_detail(class_type: str, title_marker: str | None) -> str:

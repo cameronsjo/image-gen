@@ -28,8 +28,39 @@ import base64
 import pytest
 
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
-from image_gen.services._sizing import _DIVISOR, _MAX_DIM, _RATIO_MAP, compute_size
+from image_gen.services._sizing import (
+    _DIVISOR,
+    _MAX_DIM,
+    _RATIO_MAP,
+    compute_dimensions,
+    compute_size,
+)
 from image_gen.services.provider import decode_b64_image
+
+
+@pytest.mark.parametrize(
+    ("ratio", "base", "expected"),
+    [
+        ("1:1", 2048, (2048, 2048)),
+        ("16:9", 1024, (1024, 576)),
+        ("9:16", 1024, (576, 1024)),
+        ("1:1", 5000, (3840, 3840)),
+        ("9:16", 5000, (2160, 3840)),
+        ("21:9", 32, (32, 16)),
+        ("2:3", 8, (16, 8)),
+    ],
+)
+def test_compute_dimensions_returns_integer_dimensions(ratio, base, expected):
+    dimensions = compute_dimensions(ratio, base, "TestProvider")
+    assert dimensions == expected
+    assert all(type(axis) is int for axis in dimensions)
+    assert compute_size(ratio, base, "TestProvider") == f"{expected[0]}x{expected[1]}"
+
+
+def test_compute_dimensions_rejects_unknown_ratio():
+    with pytest.raises(UnsupportedParameterError, match=r"Acme provider.*'7:3'"):
+        compute_dimensions("7:3", 1024, "Acme")
+
 
 # ---------------------------------------------------------------------------
 # compute_size — happy paths
