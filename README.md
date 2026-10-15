@@ -262,6 +262,10 @@ uv run pre-commit run --all-files
 
 Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `IMAGEGEN_QUOTA_REFILL_RATE` tokens/second). Quota spans all providers — there are no per-provider buckets. See `.env.example` for all configurable variables.
 
+### Generation usage metadata
+
+Generation metadata includes nullable `usage` with OpenRouter prompt, completion, and total token counts plus `cost_details` when supplied. Missing usage stays unknown; legacy records remain readable. The breakdown is persisted for REST and MCP generations without requiring UI display.
+
 ## License
 
 MIT

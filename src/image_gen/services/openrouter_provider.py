@@ -136,12 +136,20 @@ class OpenRouterProvider(ImageProvider):
 
         # OpenRouter reports the billed amount in ``usage.cost`` (USD, nullable and
         # sometimes absent).  Read it defensively — its absence is never an error.
-        usage = data.get("usage") or {}
+        raw_usage = data.get("usage")
+        usage = raw_usage if isinstance(raw_usage, dict) else {}
         cost = usage.get("cost")
+        details = {
+            key: usage[key]
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens", "cost_details")
+            if key in usage
+        }
 
         image_data = decode_b64_image(b64, "OpenRouter")
         logger.info("OpenRouter image generated successfully", model=model, cost_usd=cost)
-        return ProviderResult(image_data=image_data, mime_type="image/png", cost_usd=cost)
+        return ProviderResult(
+            image_data=image_data, mime_type="image/png", cost_usd=cost, usage=details or None
+        )
 
     async def list_models(self) -> list[str]:
         """Discover OpenRouter image models from the public models catalogue.

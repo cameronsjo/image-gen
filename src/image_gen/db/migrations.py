@@ -64,5 +64,8 @@ async def run_migrations(db: aiosqlite.Connection) -> None:
     )
     await _add_column_if_missing(db, "model", "ALTER TABLE generations ADD COLUMN model TEXT")
     await _add_column_if_missing(db, "cost_usd", "ALTER TABLE generations ADD COLUMN cost_usd REAL")
+    await _add_column_if_missing(
+        db, "usage_json", "ALTER TABLE generations ADD COLUMN usage_json TEXT"
+    )
     await db.commit()
     logger.info("Database migrations applied")
