@@ -202,6 +202,7 @@ def register(mcp: FastMCP) -> None:
                 file_path=str(file_path),
                 file_size=file_size,
                 cost_usd=result.cost_usd,
+                usage=result.usage,
                 completed_at=datetime.now(UTC),
             )
 

@@ -266,6 +266,10 @@ Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `
 
 `IMAGEGEN_COMFYUI_MAX_IMAGE_BYTES` limits each `/view` image to 64 MiB by default and must be positive. Increase it explicitly for larger custom workflows. Both declared length and actual streamed bytes are checked, including responses without a length or with a misleading length. ComfyUI image requests ask for identity encoding; unexpected compressed responses are rejected to avoid expansion before the limit. Normal PNG responses and existing timeout behavior are unchanged.
 
+### Generation usage metadata
+
+Generation metadata includes nullable `usage` with OpenRouter prompt, completion, and total token counts plus `cost_details` when supplied. Missing usage stays unknown; legacy records remain readable. The breakdown is persisted for REST and MCP generations without requiring UI display.
+
 ## Stored image names
 
 New REST and MCP generations store the same descriptive, collision-free basename offered for download. Existing ULID-only files remain readable at their persisted paths; no bulk rename is performed. Stored paths are resolved and checked against the configured images directory before serving, including symlinks. Legacy relative paths retain their original process-working-directory interpretation. New writes refuse existing filenames instead of overwriting them.

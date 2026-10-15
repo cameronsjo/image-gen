@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -82,6 +82,7 @@ class GenerationResponse(BaseModel):
     file_path: str | None = None
     file_size: int | None = None
     cost_usd: float | None = None
+    usage: dict[str, Any] | None = None
     created_at: datetime
     completed_at: datetime | None = None
 
