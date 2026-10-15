@@ -5,8 +5,8 @@ downloading a generated image.  Both the web UI and the server's
 ``Content-Disposition`` header derive the name from :func:`download_filename`,
 so they agree with zero duplication.
 
-The on-disk layout is unrelated: stored files keep their ``{ULID}.png`` names
-(already unique).  Only the suggested download name is made descriptive here.
+Newly generated images reuse this basename on disk. Existing ULID-only files
+remain served through their persisted paths.
 """
 
 import re
