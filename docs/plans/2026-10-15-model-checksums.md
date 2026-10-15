@@ -9,11 +9,16 @@ Cameron authorized tightening-only hardening via cos-imagegen2/go.md.
 - [x] Support Linux sha256sum and macOS shasum; fail closed on hashing failure.
 - [x] Exercise tiny local fixtures with stub curl/comfy; no models downloaded or installed.
 - [x] Remove both verification sites in a disposable copied script: both corrupt-file tests fail.
-- [x] Final gates: 315 tests / 90.06% coverage, ruff lint/format, mypy, bash syntax, ShellCheck, uv build.
-- [x] Independent code/security reviews completed without change-induced findings.
+- [x] Remove unique temporary downloads on normal exit and INT/TERM interruption.
+- [x] Set verified newly installed model files to mode 0644 before atomic rename.
+- [x] Exercise interrupted-download cleanup, signal exit status, and installed modes with tiny fixtures.
+- [x] Final gates: 330 tests / 90.14% coverage, ruff lint/format, mypy, bash syntax, ShellCheck, uv build.
+- [x] Original checksum implementation's independent code/security reviews completed without change-induced findings.
+- [x] Fix-round independent code/security review completed without supported findings.
+- [x] Codex independently reran 9 setup tests, syntax/ShellCheck and both new control-removal probes.
 
 Hosting can require publisher access; this change does not acquire/manage credentials.
 The pre-existing same-user destination-symlink race in mv is outside the checksum fix;
 model directories are assumed operator-controlled. Reviewers did not count it as a regression.
-Delivery and the orchestrator's separate Opus review gate are recorded in report.md.
+Fix-round delivery/CI and the orchestrator's separate Opus review gate are recorded in report-fix1.md.
 Release Please owns generated changelog entries. No merge or deployment is authorized.

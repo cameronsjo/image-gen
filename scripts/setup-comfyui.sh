@@ -98,9 +98,22 @@ verify_checksum() {
   fi
 }
 
+download_tmp=''
+
+cleanup_download_tmp() {
+  if [ -n "${download_tmp:-}" ]; then
+    rm -f -- "$download_tmp"
+    download_tmp=''
+  fi
+}
+
 download_models() {
   command -v curl >/dev/null 2>&1 || die "curl not found"
-  local entry url reldir fname expected dest dir download_tmp
+  trap cleanup_download_tmp EXIT
+  trap 'cleanup_download_tmp; exit 130' INT
+  trap 'cleanup_download_tmp; exit 143' TERM
+
+  local entry url reldir fname expected dest dir
   for entry in "${MODELS[@]}"; do
     url="${entry%%|*}"; entry="${entry#*|}"
     reldir="${entry%%|*}"; entry="${entry#*|}"
@@ -119,19 +132,22 @@ download_models() {
     log_step "downloading $fname → models/$reldir (large — may take a while)"
     if command curl -fL --retry 3 --retry-delay 5 -o "$download_tmp" "$url" >&2; then
       if ! verify_checksum "$download_tmp" "$expected"; then
-        rm -f -- "$download_tmp"
         die "downloaded model failed checksum verification: $fname"
       fi
+      if ! chmod 0644 "$download_tmp"; then
+        die "cannot set permissions on verified model: $fname"
+      fi
       if ! mv "$download_tmp" "$dest"; then
-        rm -f -- "$download_tmp"
         die "cannot install verified model: $fname"
       fi
+      download_tmp=''
       log_ok "$reldir/$fname (SHA-256 verified)"
     else
-      rm -f -- "$download_tmp"
       die "download failed for $url"
     fi
   done
+
+  trap - EXIT INT TERM
 }
 
 main() {

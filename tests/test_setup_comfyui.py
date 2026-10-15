@@ -3,8 +3,10 @@
 import hashlib
 import os
 import re
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -50,6 +52,7 @@ def setup(tmp_path):
         + r"""
 import os
 import sys
+import time
 from pathlib import Path
 args = sys.argv[1:]
 output = Path(args[args.index('-o') + 1])
@@ -60,11 +63,23 @@ mode = os.environ.get('TEST_DOWNLOAD_MODE', 'good')
 output.write_bytes(('fixture:' + name).encode() if mode == 'good' else b'corrupted')
 if mode == 'fail':
     sys.exit(22)
+if mode == 'interrupt':
+    output.write_bytes(b'partial')
+    Path(os.environ['TEST_READY']).write_text('ready')
+    while True:
+        time.sleep(1)
 """
     )
     curl.chmod(0o755)
     log = tmp_path / "downloads.log"
-    env = dict(os.environ, COMFY_HOME=str(home), NO_COLOR="1", TEST_DOWNLOAD_LOG=str(log))
+    ready = tmp_path / "download.ready"
+    env = dict(
+        os.environ,
+        COMFY_HOME=str(home),
+        NO_COLOR="1",
+        TEST_DOWNLOAD_LOG=str(log),
+        TEST_READY=str(ready),
+    )
     env["PATH"] = str(binaries) + os.pathsep + os.environ["PATH"]
 
     def run(mode="good"):
@@ -76,7 +91,18 @@ if mode == 'fail':
             capture_output=True,
         )
 
-    return run, home, log, entries, binaries
+    def start(mode="good"):
+        return subprocess.Popen(
+            ["bash", str(script)],
+            cwd=tmp_path,
+            env={**env, "TEST_DOWNLOAD_MODE": mode},
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+
+    return run, start, home, log, entries, binaries, ready
 
 
 def assert_no_partial(home):
@@ -84,14 +110,14 @@ def assert_no_partial(home):
 
 
 def test_verified_downloads_and_existing_files(setup):
-    run, home, log, entries, _ = setup
+    run, _, home, log, entries, _, _ = setup
     result = run()
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert len(log.read_text().splitlines()) == 4
     for _, directory, filename, _ in entries:
-        assert (home / "models" / directory / filename).read_bytes() == (
-            "fixture:" + filename
-        ).encode()
+        target = home / "models" / directory / filename
+        assert target.read_bytes() == ("fixture:" + filename).encode()
+        assert target.stat().st_mode & 0o777 == 0o644
     log.write_text("")
     result = run()
     assert result.returncode == 0, result.stderr
@@ -100,7 +126,7 @@ def test_verified_downloads_and_existing_files(setup):
 
 
 def test_corrupt_download_rejected_and_partial_removed(setup):
-    run, home, _, entries, _ = setup
+    run, _, home, _, entries, _, _ = setup
     result = run("corrupt")
     assert result.returncode != 0
     assert "checksum mismatch" in result.stderr
@@ -110,7 +136,7 @@ def test_corrupt_download_rejected_and_partial_removed(setup):
 
 
 def test_corrupt_existing_file_rejected_and_left_unchanged(setup):
-    run, home, log, entries, _ = setup
+    run, _, home, log, entries, _, _ = setup
     assert run().returncode == 0
     _, directory, filename, _ = entries[0]
     target = home / "models" / directory / filename
@@ -124,7 +150,7 @@ def test_corrupt_existing_file_rejected_and_left_unchanged(setup):
 
 
 def test_download_failure_removes_partial(setup):
-    run, home, _, _, _ = setup
+    run, _, home, _, _, _, _ = setup
     result = run("fail")
     assert result.returncode != 0
     assert "download failed" in result.stderr
@@ -132,7 +158,7 @@ def test_download_failure_removes_partial(setup):
 
 
 def test_hashing_failure_does_not_install(setup):
-    run, home, _, entries, binaries = setup
+    run, _, home, _, entries, binaries, _ = setup
     for name in ("sha256sum", "shasum"):
         stub = binaries / name
         stub.write_text("#!/bin/sh\nexit 1\n")
@@ -145,7 +171,7 @@ def test_hashing_failure_does_not_install(setup):
 
 
 def test_existing_non_file_is_not_treated_as_verified(setup):
-    run, home, _, entries, _ = setup
+    run, _, home, _, entries, _, _ = setup
     _, directory, filename, _ = entries[0]
     target = home / "models" / directory / filename
     target.mkdir(parents=True)
@@ -153,3 +179,27 @@ def test_existing_non_file_is_not_treated_as_verified(setup):
     assert result.returncode != 0
     assert "not a regular file" in result.stderr
     assert target.is_dir()
+
+
+@pytest.mark.parametrize(
+    ("interrupt", "expected_returncode"),
+    [(signal.SIGINT, 130), (signal.SIGTERM, 143)],
+)
+def test_interrupted_download_cleans_partial_and_exits(setup, interrupt, expected_returncode):
+    _, start, home, _, _, _, ready = setup
+    process = start("interrupt")
+    try:
+        deadline = time.monotonic() + 5
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ready.exists(), "curl stub did not start the interrupted download"
+
+        os.killpg(process.pid, interrupt)
+        stdout, stderr = process.communicate(timeout=5)
+    finally:
+        if process.poll() is None:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.communicate(timeout=5)
+
+    assert process.returncode == expected_returncode, (stdout, stderr)
+    assert_no_partial(home)
