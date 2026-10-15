@@ -129,6 +129,7 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 | `GET` | `/ready` | No | Readiness probe (DB + providers + discovered models) |
 | `POST` | `/api/generate` | Yes | Generate an image from a text prompt |
 | `GET` | `/api/images` | Yes | List generation records |
+| `GET` | `/api/images/costs` | Yes | Reported-cost aggregates (all time and current UTC day) |
 | `GET` | `/api/images/{id}` | Yes | Get generation metadata |
 | `GET` | `/api/images/{id}/file` | Yes | Download generated image |
 | `POST` | `/mcp` | JWT | MCP server (Streamable HTTP) |
@@ -261,6 +262,10 @@ uv run pre-commit run --all-files
 ### Quota Notes
 
 Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `IMAGEGEN_QUOTA_REFILL_RATE` tokens/second). Quota spans all providers — there are no per-provider buckets. See `.env.example` for all configurable variables.
+
+## History costs
+
+The UI shows per-generation reported costs and separate server aggregates for all time and the current UTC day, scoped by generation creation time. Completed rows without a reported cost are labeled unknown and excluded from the aggregate; pending, generating, and failed rows are counted by status separately. These are reported-cost summaries, not billing totals.
 
 ### Generation usage metadata
 
