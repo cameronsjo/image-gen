@@ -20,10 +20,24 @@ class StorageService:
         self._images_dir_resolved = self._images_dir.resolve()
         logger.info("Storage initialized", images_dir=str(self._images_dir))
 
-    async def save_image(self, image_data: bytes, image_id: str) -> Path:
+    async def save_image(
+        self, image_data: bytes, image_id: str, *, filename: str | None = None
+    ) -> Path:
         """Save image bytes to disk and return the file path."""
-        file_path = self.get_image_path(image_id)
-        file_path.write_bytes(image_data)
+        if filename is None:
+            file_path = self.get_image_path(image_id)
+        else:
+            # New names must be basenames. Slugging is useful for presentation,
+            # but containment is independently enforced at the write boundary.
+            if not filename or Path(filename).name != filename or Path(filename).is_absolute():
+                raise StorageError("Stored image filename must be a basename")
+            file_path = self._contained_path(self._images_dir_resolved / filename)
+        # Refuse collisions and pre-existing symlinks instead of overwriting.
+        try:
+            with file_path.open("xb") as output:
+                output.write(image_data)
+        except OSError as exc:
+            raise StorageError("Unable to create image file") from exc
         logger.info(
             "Image saved",
             image_id=image_id,
@@ -39,19 +53,26 @@ class StorageService:
         directory, defeating path-traversal ids such as ``../../etc/passwd``.
         Raises :class:`StorageError` if the id escapes containment.
         """
+        return self._contained_path(self._images_dir_resolved / f"{image_id}.png")
+
+    def resolve_stored_path(self, file_path: str) -> Path:
+        """Validate the persisted path before serving it.
+
+        Old relative paths were recorded relative to the process working
+        directory; retain that interpretation. New writes return absolute paths.
+        """
+        return self._contained_path(Path(file_path))
+
+    def _contained_path(self, path: Path) -> Path:
         images_dir = self._images_dir_resolved
-        candidate = (images_dir / f"{image_id}.png").resolve()
+        candidate = path.resolve()
         try:
             candidate.relative_to(images_dir)
         except ValueError as exc:
             logger.warning(
-                "Rejected image path outside storage directory",
-                image_id=image_id,
-                candidate=str(candidate),
-                images_dir=str(images_dir),
+                "Rejected image path outside storage directory", candidate=str(candidate)
             )
-            msg = f"Image id escapes storage containment: {image_id!r}"
-            raise StorageError(msg) from exc
+            raise StorageError("Image path escapes storage containment") from exc
         return candidate
 
     def image_exists(self, image_id: str) -> bool:
