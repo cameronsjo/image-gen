@@ -42,6 +42,9 @@ class Settings(BaseSettings):
         default="flux1-schnell", description="ComfyUI diffusion model (informational/list_models)"
     )
     comfyui_steps: int = Field(default=4, description="Sampler steps (FLUX.1-schnell is ~4)")
+    comfyui_max_image_bytes: int = Field(
+        default=64 * 1024 * 1024, gt=0, description="Maximum ComfyUI image response bytes"
+    )
     comfyui_workflow: Path | None = Field(
         default=None, description="Override the bundled API-format workflow JSON template"
     )
