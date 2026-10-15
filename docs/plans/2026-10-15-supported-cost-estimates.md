@@ -50,3 +50,12 @@ CHANGELOG.md remains byte-identical to main; final verification follows in repor
 The reconciled artifact passed 366 tests with 91.37% coverage and all local
 gates. Independent merge review found no behavioral/security defects; 36 cost/usage
 tests passed independently. Resolved conflict files are staged as part of delivery.
+
+## Standing-order reconciliation after #42
+
+Merged main c45212c while retaining history totals and both usage/estimate fields.
+Only README conflicted; main section order is retained and estimate documentation
+follows Stored image names. CHANGELOG.md is byte-identical to main.
+Full local gates passed: 370 tests, 91.60% coverage, lint/format/types/build.
+Codex independently reviewed the resolution and passed 51 cost/history/image/usage
+tests plus a shared-cache type check. Partial #24 scope remains unchanged.

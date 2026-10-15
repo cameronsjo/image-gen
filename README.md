@@ -129,6 +129,7 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 | `GET` | `/ready` | No | Readiness probe (DB + providers + discovered models) |
 | `POST` | `/api/generate` | Yes | Generate an image from a text prompt |
 | `GET` | `/api/images` | Yes | List generation records |
+| `GET` | `/api/images/costs` | Yes | Reported-cost aggregates (all time and current UTC day) |
 | `GET` | `/api/images/{id}` | Yes | Get generation metadata |
 | `GET` | `/api/images/{id}/file` | Yes | Download generated image |
 | `POST` | `/mcp` | JWT | MCP server (Streamable HTTP) |
@@ -262,11 +263,9 @@ uv run pre-commit run --all-files
 
 Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `IMAGEGEN_QUOTA_REFILL_RATE` tokens/second). Quota spans all providers — there are no per-provider buckets. See `.env.example` for all configurable variables.
 
-## Supported output-cost estimates
+## History costs
 
-`cost_usd` remains a provider-reported charge. The separate nullable `estimated_output_cost_usd` is an estimated image-output amount from published per-image tables, excluding input tokens, thinking, grounding and other charges. REST metadata, the UI result panel and MCP generation output distinguish the estimate explicitly; reported-cost history totals do not include it.
-
-The lookup in `services/pricing.py` covers the exact `gpt-image-2` model at 1024x1024, 1024x1536 and 1536x1024 for low/medium/high quality, and stable `gemini-3-pro-image` at 1K/2K/4K. Every other model/size combination is unknown (`null`), with no interpolation or assumed preview/snapshot alias. In particular, the current OpenAI 2K default and the Gemini preview default stay unknown unless their exact published pricing is added and verified. Only 1024x1024/low is currently reachable for OpenAI through the canonical resolution mapper; the other published table rows are retained as exact lookups, not exposed as new size controls. Selecting a covered model/size uses the published output-only value; it never becomes a total request-cost claim.
+The UI shows per-generation reported costs and separate server aggregates for all time and the current UTC day, scoped by generation creation time. Completed rows without a reported cost are labeled unknown and excluded from the aggregate; pending, generating, and failed rows are counted by status separately. These are reported-cost summaries, not billing totals.
 
 ### Generation usage metadata
 
@@ -275,6 +274,12 @@ Generation metadata includes nullable `usage` with OpenRouter prompt, completion
 ## Stored image names
 
 New REST and MCP generations store the same descriptive, collision-free basename offered for download. Existing ULID-only files remain readable at their persisted paths; no bulk rename is performed. Stored paths are resolved and checked against the configured images directory before serving, including symlinks. Legacy relative paths retain their original process-working-directory interpretation. New writes refuse existing filenames instead of overwriting them.
+
+## Supported output-cost estimates
+
+`cost_usd` remains a provider-reported charge. The separate nullable `estimated_output_cost_usd` is an estimated image-output amount from published per-image tables, excluding input tokens, thinking, grounding and other charges. REST metadata, the UI result panel and MCP generation output distinguish the estimate explicitly; reported-cost history totals do not include it.
+
+The lookup in `services/pricing.py` covers the exact `gpt-image-2` model at 1024x1024, 1024x1536 and 1536x1024 for low/medium/high quality, and stable `gemini-3-pro-image` at 1K/2K/4K. Every other model/size combination is unknown (`null`), with no interpolation or assumed preview/snapshot alias. In particular, the current OpenAI 2K default and the Gemini preview default stay unknown unless their exact published pricing is added and verified. Only 1024x1024/low is currently reachable for OpenAI through the canonical resolution mapper; the other published table rows are retained as exact lookups, not exposed as new size controls. Selecting a covered model/size uses the published output-only value; it never becomes a total request-cost claim.
 
 ## License
 

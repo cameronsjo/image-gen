@@ -105,6 +105,29 @@ class GenerationResponse(BaseModel):
         return download_filename(self.name, self.model, self.created_at, self.id)
 
 
+class CostAggregate(BaseModel):
+    """Server-side cost and status counts for one explicit time scope."""
+
+    total_count: int = Field(description="All generation rows in this scope")
+    known_cost_usd: float | None = Field(
+        default=None,
+        description="Sum of valid completed reported costs; null if absent or non-finite",
+    )
+    completed_known_count: int = Field(description="Completed rows included in known_cost_usd")
+    completed_unknown_count: int = Field(description="Completed rows without a valid reported cost")
+    pending_count: int = Field(description="Rows still pending")
+    generating_count: int = Field(description="Rows currently generating")
+    failed_count: int = Field(description="Rows that failed")
+    other_count: int = Field(description="Rows with an unrecognized status")
+
+
+class CostSummaryResponse(BaseModel):
+    """Reported-cost aggregates for all time and the current UTC day."""
+
+    all_time: CostAggregate
+    today: CostAggregate
+
+
 class QuotaStatus(BaseModel):
     """Current rate limit quota status."""
 
