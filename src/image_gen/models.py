@@ -82,6 +82,13 @@ class GenerationResponse(BaseModel):
     file_path: str | None = None
     file_size: int | None = None
     cost_usd: float | None = None
+    estimated_output_cost_usd: float | None = Field(
+        default=None,
+        description=(
+            "Image-output estimate from published tables; excludes input/other charges. "
+            "Null means the exact model/size price is unknown, not zero."
+        ),
+    )
     usage: dict[str, Any] | None = None
     created_at: datetime
     completed_at: datetime | None = None

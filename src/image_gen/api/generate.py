@@ -125,6 +125,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             file_path=str(file_path),
             file_size=file_size,
             cost_usd=result.cost_usd,
+            estimated_output_cost_usd=result.estimated_output_cost_usd,
             usage=result.usage,
             completed_at=now,
         )
@@ -136,6 +137,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             provider=provider_name,
             file_size=file_size,
             cost_usd=result.cost_usd,
+            estimated_output_cost_usd=result.estimated_output_cost_usd,
         )
 
         # Return the updated record

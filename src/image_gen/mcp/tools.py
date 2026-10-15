@@ -202,12 +202,19 @@ def register(mcp: FastMCP) -> None:
                 file_path=str(file_path),
                 file_size=file_size,
                 cost_usd=result.cost_usd,
+                estimated_output_cost_usd=result.estimated_output_cost_usd,
                 usage=result.usage,
                 completed_at=datetime.now(UTC),
             )
 
             # Only surface a cost line when the provider reported one (OpenRouter).
             cost_line = f"Cost: ${result.cost_usd:.4f}\n" if result.cost_usd is not None else ""
+            estimate_line = (
+                "Estimated image output cost (published table; excludes input/other charges): "
+                f"${result.estimated_output_cost_usd:.6f}\n"
+                if result.estimated_output_cost_usd is not None
+                else ""
+            )
             return (
                 f"Image generated successfully!\n"
                 f"ID: {record.id}\n"
@@ -216,6 +223,7 @@ def register(mcp: FastMCP) -> None:
                 f"Model: {model}\n"
                 f"File size: {file_size:,} bytes\n"
                 f"{cost_line}"
+                f"{estimate_line}"
                 f"Path: {file_path}"
             )
 

@@ -36,6 +36,7 @@ from openai import AsyncOpenAI
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError, UnsupportedParameterError
 from image_gen.services._sizing import compute_size
+from image_gen.services.pricing import openai_output_estimate
 from image_gen.services.provider import (
     ImageProvider,
     ProviderResult,
@@ -135,7 +136,11 @@ class OpenAIProvider(ImageProvider):
 
         image_data = decode_b64_image(b64, "OpenAI")
         logger.info("OpenAI image generated successfully", model=model, size=size)
-        return ProviderResult(image_data=image_data, mime_type="image/png")
+        return ProviderResult(
+            image_data=image_data,
+            mime_type="image/png",
+            estimated_output_cost_usd=openai_output_estimate(model, quality, size),
+        )
 
     async def list_models(self) -> list[str]:
         """Discover OpenAI image models via ``models.list()``.

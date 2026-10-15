@@ -42,6 +42,11 @@ def _row_to_response(row: aiosqlite.Row) -> GenerationResponse:
         file_path=row["file_path"],
         file_size=row["file_size"],
         cost_usd=cost_usd_val,
+        estimated_output_cost_usd=(
+            row["estimated_output_cost_usd"]
+            if "estimated_output_cost_usd" in row.keys()  # noqa: SIM118
+            else None
+        ),
         usage=(
             json.loads(row["usage_json"])
             if "usage_json" in row.keys() and row["usage_json"] is not None  # noqa: SIM118
@@ -121,6 +126,7 @@ async def update_generation(
     file_path: str | None = None,
     file_size: int | None = None,
     cost_usd: float | None = None,
+    estimated_output_cost_usd: float | None = None,
     usage: dict[str, Any] | None = None,
     completed_at: datetime | None = None,
 ) -> None:
@@ -143,6 +149,9 @@ async def update_generation(
     if cost_usd is not None:
         updates.append("cost_usd = ?")
         params.append(cost_usd)
+    if estimated_output_cost_usd is not None:
+        updates.append("estimated_output_cost_usd = ?")
+        params.append(estimated_output_cost_usd)
     if usage is not None:
         updates.append("usage_json = ?")
         params.append(json.dumps(usage))

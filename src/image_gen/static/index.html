@@ -482,6 +482,7 @@ button{ font:inherit; }
     add('dimensions', dims(rec)); add('seed', rec.seed); add('duration', dur(rec));
     add('created', relTime(rec.created_at||rec.createdAt||rec.created));
     if(rec.cost_usd!=null) add('cost', '$'+Number(rec.cost_usd).toFixed(4));
+    if(rec.estimated_output_cost_usd!=null) add('estimated output cost (published table; excludes input/other charges)', '$'+Number(rec.estimated_output_cost_usd).toFixed(6));
     els.meta.innerHTML = rows.join('');
 
     // actions

@@ -51,10 +51,11 @@ async def _add_column_if_missing(db: aiosqlite.Connection, column: str, ddl: str
 async def run_migrations(db: aiosqlite.Connection) -> None:
     """Apply all schema migrations.
 
-    The ``provider``, ``model``, ``cost_usd`` and ``usage_json`` columns are
-    added post-hoc (not in ``SCHEMA``) so pre-existing databases pick them up.
-    All except ``provider`` are nullable with no default, so rows written
-    before each migration read back as ``None``.
+    The ``provider``, ``model``, ``cost_usd``, ``usage_json`` and
+    ``estimated_output_cost_usd`` columns are added post-hoc (not in
+    ``SCHEMA``) so pre-existing databases pick them up. All except
+    ``provider`` are nullable with no default, so older rows read
+    back as ``None``.
     """
     await db.executescript(SCHEMA)
     await _add_column_if_missing(
@@ -66,6 +67,11 @@ async def run_migrations(db: aiosqlite.Connection) -> None:
     await _add_column_if_missing(db, "cost_usd", "ALTER TABLE generations ADD COLUMN cost_usd REAL")
     await _add_column_if_missing(
         db, "usage_json", "ALTER TABLE generations ADD COLUMN usage_json TEXT"
+    )
+    await _add_column_if_missing(
+        db,
+        "estimated_output_cost_usd",
+        "ALTER TABLE generations ADD COLUMN estimated_output_cost_usd REAL",
     )
     await db.commit()
     logger.info("Database migrations applied")
