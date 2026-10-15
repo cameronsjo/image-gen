@@ -190,7 +190,9 @@ def register(mcp: FastMCP) -> None:
                 resolution=resolution,
                 model=model,
             )
-            file_path = await storage.save_image(result.image_data, record.id)
+            file_path = await storage.save_image(
+                result.image_data, record.id, filename=record.download_name
+            )
             file_size = len(result.image_data)
 
             await repository.update_generation(

@@ -78,3 +78,56 @@ def test_image_exists_rejects_traversal(tmp_path: Path) -> None:
     # rather than silently probing arbitrary filesystem locations.
     with pytest.raises(StorageError):
         storage.image_exists("../../etc/passwd")
+
+
+async def test_descriptive_filename_and_collision(tmp_path: Path) -> None:
+    storage = _storage(tmp_path)
+    path = await storage.save_image(PNG_BYTES, "id", filename="sunset-model-time-id.png")
+    assert path.name == "sunset-model-time-id.png"
+    assert storage.resolve_stored_path(str(path)).read_bytes() == PNG_BYTES
+    assert not storage.get_image_path("id").exists()
+    with pytest.raises(StorageError):
+        await storage.save_image(b"replacement", "id", filename=path.name)
+    assert path.read_bytes() == PNG_BYTES
+
+
+@pytest.mark.parametrize(
+    "name", ["../escape.png", "/tmp/escape.png", "sub/../escape.png", "💣/../../escape.png"]
+)
+async def test_descriptive_write_rejects_paths(tmp_path: Path, name: str) -> None:
+    storage = _storage(tmp_path)
+    with pytest.raises(StorageError):
+        await storage.save_image(PNG_BYTES, "id", filename=name)
+    assert not (tmp_path / "data" / "escape.png").exists()
+
+
+@pytest.mark.parametrize(
+    "relative", ["../escape.png", "../../escape.png", "💣/../../../escape.png"]
+)
+def test_stored_path_rejects_escape(tmp_path: Path, relative: str) -> None:
+    storage = _storage(tmp_path)
+    unsafe = tmp_path / "data" / "images" / relative
+    with pytest.raises(StorageError):
+        storage.resolve_stored_path(str(unsafe))
+
+
+async def test_symlinks_cannot_escape_storage(tmp_path: Path) -> None:
+    storage = _storage(tmp_path)
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"private")
+    link = tmp_path / "data" / "images" / "link.png"
+    link.symlink_to(outside)
+    with pytest.raises(StorageError):
+        storage.resolve_stored_path(str(link))
+    with pytest.raises(StorageError):
+        await storage.save_image(PNG_BYTES, "id", filename="link.png")
+    assert outside.read_bytes() == b"private"
+
+
+async def test_legacy_relative_stored_path(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    storage = StorageService(Settings(data_dir=Path("data")))
+    # Previous versions recorded cwd-relative paths when data_dir was relative.
+    path = tmp_path / "data" / "images" / "legacy.png"
+    path.write_bytes(PNG_BYTES)
+    assert storage.resolve_stored_path("data/images/legacy.png") == path

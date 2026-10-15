@@ -89,10 +89,61 @@ async def test_download_storage_error_is_404_not_leaked(client: AsyncClient) -> 
     created = await _create_image(client)
     app = client._transport.app  # type: ignore[attr-defined]
     # Force the storage layer to reject the path as if it escaped containment.
-    app.state.storage.get_image_path = MagicMock(
+    app.state.storage.resolve_stored_path = MagicMock(
         side_effect=StorageError("escapes storage containment: secret detail")
     )
     resp = await client.get(f"/api/images/{created['id']}/file")
     assert resp.status_code == 404
     assert "containment" not in resp.text
     assert "secret detail" not in resp.text
+
+
+async def test_new_images_use_descriptive_storage_and_legacy_files_still_serve(client):
+    from pathlib import Path
+
+    from image_gen.db import repository
+
+    created = await _create_image(client)
+    app = client._transport.app
+    stored = Path(created["file_path"])
+    assert stored.name == created["download_name"]
+    assert not app.state.storage.get_image_path(created["id"]).exists()
+    assert (await client.get(f"/api/images/{created['id']}/file")).content == stored.read_bytes()
+    legacy = app.state.storage.get_image_path(created["id"])
+    legacy.write_bytes(stored.read_bytes())
+    await repository.update_generation(app.state.db, created["id"], file_path=str(legacy))
+    assert (await client.get(f"/api/images/{created['id']}/file")).status_code == 200
+
+
+async def test_stored_outside_path_is_rejected_without_leaking(client, tmp_path):
+    from image_gen.db import repository
+
+    created = await _create_image(client)
+    app = client._transport.app
+    outside = tmp_path / "outside.png"
+    outside.write_bytes(b"private-outside-content")
+    await repository.update_generation(app.state.db, created["id"], file_path=str(outside))
+    response = await client.get(f"/api/images/{created['id']}/file")
+    assert response.status_code == 404
+    assert b"private-outside-content" not in response.content
+
+
+async def test_user_controlled_names_stay_contained(client):
+    from pathlib import Path
+
+    VALID_PROMPT = (
+        "A detailed photograph of a red fox in a snowy forest with warm morning light. " * 6
+    )
+
+    ids = set()
+    for name in ("../escape", "/absolute/path", "💣 café", "same", "same"):
+        response = await client.post("/api/generate", json={"name": name, "prompt": VALID_PROMPT})
+        assert response.status_code == 201
+        record = response.json()
+        path = Path(record["file_path"])
+        root = client._transport.app.state.settings.images_dir.resolve()
+        assert path.parent == root
+        assert path.name == record["download_name"]
+        assert record["id"] not in ids
+        ids.add(record["id"])
+        assert (await client.get(f"/api/images/{record['id']}/file")).status_code == 200

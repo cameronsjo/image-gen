@@ -24,3 +24,8 @@ remaining supported defects after documentation corrections. Provider calls were
 Separate pre-existing follow-up: Google lists the configured Gemini preview
 default as shut down; migrating that default is outside this pricing change.
 Source: https://ai.google.dev/gemini-api/docs/deprecations
+
+## Fix round 1
+
+- [x] Merge origin/main after #43; retain both README sections and descriptive-storage callers.
+- [x] Verify full local gates on the combined artifact: 346 tests, 91.29% coverage, lint/format/types and build pass. Final push/CI evidence is in report-fix1.md.
