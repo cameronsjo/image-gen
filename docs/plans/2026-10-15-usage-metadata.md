@@ -15,3 +15,11 @@ Delivery (commit, push, ready PR and CI) is recorded in the run report; merging 
 passed (316 tests, 90.14% coverage). `uv build` produced a wheel and sdist.
 The shared cache lives beside worktrees so it cannot enter the source distribution.
 Release Please owns CHANGELOG.md; the feature commit supplies its release note.
+
+## Fix round 1
+
+- [x] Merge origin/main after #43, preserving descriptive-storage callers and usage persistence.
+- [x] Retain both README sections and all existing provider/model/cost/usage migrations.
+- [x] Run full local gates on the combined artifact: 329 tests, 90.23% coverage, lint/format/types and build pass.
+
+Push and final PR CI evidence are recorded in report-fix1.md.

@@ -112,7 +112,9 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             model=model,
         )
 
-        file_path = await storage.save_image(result.image_data, record.id)
+        file_path = await storage.save_image(
+            result.image_data, record.id, filename=record.download_name
+        )
         file_size = len(result.image_data)
 
         now = datetime.now(UTC)
