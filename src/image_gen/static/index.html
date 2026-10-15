@@ -206,11 +206,13 @@ button{ font:inherit; }
         <span class="lbl">history</span>
         <span class="history__count" id="history-count"></span>
       </div>
+      <p class="history__count" id="history-cost" role="status"></p>
       <div id="history-list"><div class="hist-empty">loading…</div></div>
     </div>
   </section>
 </main>
 
+<script src="/ui/costs.js"></script>
 <script>
 "use strict";
 (function(){
@@ -266,7 +268,7 @@ button{ font:inherit; }
     loadingIcon:$('loading-icon'), loadingLabel:$('loading-label'),
     active:$('result-active'), img:$('result-img'), dim:$('result-dim'), overlay:$('result-overlay'),
     meta:$('result-meta'), btnDownload:$('btn-download'), btnOpen:$('btn-open'),
-    historyList:$('history-list'), historyCount:$('history-count')
+    historyList:$('history-list'), historyCount:$('history-count'), historyCost:$('history-cost')
   };
 
   // Static icon labels
@@ -404,6 +406,7 @@ button{ font:inherit; }
       .catch(function(){ renderHistory([], false); });
   }
   function renderHistory(items, selectLatest){
+    els.historyCost.textContent = ImageCosts.summarize(items);
     els.historyCount.textContent = items.length ? (items.length+' image'+(items.length>1?'s':'')) : '';
     els.historyList.innerHTML='';
     if(!items.length){
@@ -418,7 +421,7 @@ button{ font:inherit; }
         '<time>'+relTime(rec.created_at||rec.createdAt||rec.created)+'</time>'+
         thumb+
         '<span class="nm">'+escapeHtml(rec.name||rec.id)+'</span>'+
-        '<span class="mt num">'+(rec.aspect_ratio||'')+(rec.resolution?' · '+rec.resolution:'')+'</span>';
+        '<span class="mt num">'+(rec.aspect_ratio||'')+(rec.resolution?' · '+rec.resolution:'')+' · '+ImageCosts.format(rec.cost_usd)+'</span>';
       row.addEventListener('click', function(){
         if(done){ showResult(rec); markCurrent(rec.id); }
       });

@@ -262,6 +262,10 @@ uv run pre-commit run --all-files
 
 Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `IMAGEGEN_QUOTA_REFILL_RATE` tokens/second). Quota spans all providers — there are no per-provider buckets. See `.env.example` for all configurable variables.
 
+## History costs
+
+The UI shows per-generation reported costs and a known-cost total for the loaded history (the most recent 12 records). Unknown costs are labeled and excluded from the total. This is not an all-time spending total.
+
 ## License
 
 MIT
