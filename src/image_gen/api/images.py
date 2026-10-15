@@ -61,7 +61,7 @@ async def get_image_file(
         raise HTTPException(status_code=404, detail="Image file not found")
 
     try:
-        path = storage.get_image_path(image_id)
+        path = storage.resolve_stored_path(record.file_path)
     except StorageError as exc:
         # Never surface containment / I/O internals to the caller.
         raise HTTPException(status_code=404, detail="Image file not found") from exc
