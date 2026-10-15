@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -89,6 +89,7 @@ class GenerationResponse(BaseModel):
             "Null means the exact model/size price is unknown, not zero."
         ),
     )
+    usage: dict[str, Any] | None = None
     created_at: datetime
     completed_at: datetime | None = None
 

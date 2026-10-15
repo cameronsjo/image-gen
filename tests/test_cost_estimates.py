@@ -115,13 +115,16 @@ async def test_gemini_preview_and_override_remain_unknown():
 
 async def test_estimate_round_trip_separate_from_reported_cost(client, mock_gemini_result):
     mock_gemini_result.estimated_output_cost_usd = 0.134
+    mock_gemini_result.usage = {"total_tokens": 9}
     response = await client.post("/api/generate", json={"name": "estimated", "prompt": PROMPT})
     assert response.status_code == 201
     record = response.json()
     assert record["estimated_output_cost_usd"] == 0.134
     assert record["cost_usd"] is None
+    assert record["usage"] == {"total_tokens": 9}
     fetched = (await client.get(f"/api/images/{record['id']}")).json()
     assert fetched["estimated_output_cost_usd"] == 0.134
+    assert fetched["usage"] == {"total_tokens": 9}
     assert (await client.get("/api/images")).json()[0]["estimated_output_cost_usd"] == 0.134
     page = (await client.get("/ui/")).text
     # Execute the shipped renderer on the real REST record, not a label search.
@@ -194,11 +197,12 @@ async def test_legacy_migration_keeps_estimates_unknown(tmp_path):
         await migrations.run_migrations(db)
         assert (await repository.get_generation(db, "old")).estimated_output_cost_usd is None
         await repository.update_generation(
-            db, "old", cost_usd=0.02, estimated_output_cost_usd=0.006
+            db, "old", cost_usd=0.02, estimated_output_cost_usd=0.006, usage={"total_tokens": 12}
         )
         record = await repository.get_generation(db, "old")
         assert record.cost_usd == 0.02
         assert record.estimated_output_cost_usd == 0.006
+        assert record.usage == {"total_tokens": 12}
     finally:
         await db.close()
 

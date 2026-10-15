@@ -126,6 +126,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             file_size=file_size,
             cost_usd=result.cost_usd,
             estimated_output_cost_usd=result.estimated_output_cost_usd,
+            usage=result.usage,
             completed_at=now,
         )
 

@@ -41,3 +41,12 @@ Final local checks, review and pushed-head CI are appended to report-fix1.md.
 Fix-round 2 local gates passed: 349 tests, 91.29% coverage, lint/format/types,
 and package builds. The wrong-rendered-value negative control failed as expected.
 Codex reviewed this narrow log/test/documentation increment inline; no supported findings.
+
+Subsequent main reconciliation resolves conflicts against e872b8d while keeping
+both usage_json and estimated_output_cost_usd migrations, provider fields and
+REST/MCP persistence. Combined metadata round-trip assertions cover both fields.
+CHANGELOG.md remains byte-identical to main; final verification follows in report-fix1.md.
+
+The reconciled artifact passed 366 tests with 91.37% coverage and all local
+gates. Independent merge review found no behavioral/security defects; 36 cost/usage
+tests passed independently. Resolved conflict files are staged as part of delivery.
