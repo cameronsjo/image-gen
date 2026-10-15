@@ -11,7 +11,7 @@
 #   1. Install comfy-cli (via `uv tool install`) if absent.
 #   2. Install ComfyUI (clones the repo + sets up the Apple-Silicon/MPS venv) if absent.
 #   3. Download the FLUX.1-schnell split files into the right model dirs (skips any
-#      file already present — safe to re-run after a partial download).
+#      verified file already present — safe to re-run after a partial download).
 #   4. Print the launch command, or launch immediately with `--launch`.
 #
 # Usage:
@@ -22,7 +22,8 @@
 #   COMFY_HOME   ComfyUI workspace dir (default: $HOME/comfy/ComfyUI)
 #   COMFY_PORT   Port to launch on      (default: 8188)
 #
-# FLUX.1-schnell is Apache-2.0 and ungated — no Hugging Face token required.
+# FLUX.1-schnell is Apache-2.0; hosting access can require publisher approval.
+# This script does not manage credentials. Pre-provision gated files if needed.
 # Honors NO_COLOR. Diagnostics go to stderr; the final verdict to stdout.
 
 set -euo pipefail
@@ -44,14 +45,14 @@ log_skip() { printf '%s\n' "${C_DIM}• Skipping:${C_RST} $*" >&2; }
 log_err()  { printf '%s\n' "${C_RED}✗ Failed:${C_RST} $*" >&2; }
 die()      { log_err "$*"; exit 1; }
 
-# ── Model manifest: "url|relative_dir|filename" ─────────────────────────────
-# FLUX.1-schnell diffusion model + autoencoder (Apache-2.0, ungated) and the
+# ── Model manifest: "url|relative_dir|filename|sha256" ─────────────────────────────
+# FLUX.1-schnell diffusion model + autoencoder (Apache-2.0) and the
 # shared FLUX text encoders (clip_l + t5xxl_fp16 — full precision, no quant).
 MODELS=(
-  "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/flux1-schnell.safetensors|diffusion_models|flux1-schnell.safetensors"
-  "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/ae.safetensors|vae|ae.safetensors"
-  "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/clip_l.safetensors|clip|clip_l.safetensors"
-  "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/main/t5xxl_fp16.safetensors|clip|t5xxl_fp16.safetensors"
+  "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/741f7c3ce8b383c54771c7003378a50191e9efe9/flux1-schnell.safetensors|diffusion_models|flux1-schnell.safetensors|9403429e0052277ac2a87ad800adece5481eecefd9ed334e1f348723621d2a0a"
+  "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/741f7c3ce8b383c54771c7003378a50191e9efe9/ae.safetensors|vae|ae.safetensors|afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38"
+  "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/6af2a98e3f615bdfa612fbd85da93d1ed5f69ef5/clip_l.safetensors|clip|clip_l.safetensors|660c6f5b1abae9dc498ac2d21e1347d2abdb0cf6c0c0c8576cd796491d9a6cdd"
+  "https://huggingface.co/comfyanonymous/flux_text_encoders/resolve/6af2a98e3f615bdfa612fbd85da93d1ed5f69ef5/t5xxl_fp16.safetensors|clip|t5xxl_fp16.safetensors|6e480b09fae049a72d2a8c5fbccb8d3e92febeb233bbe9dfe7256958a9167635"
 )
 
 ensure_comfy_cli() {
@@ -79,27 +80,55 @@ ensure_comfyui() {
   log_ok "ComfyUI installed"
 }
 
+verify_checksum() {
+  local file="$1" expected="$2" hash_output actual
+  [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || { log_err "invalid pinned checksum"; return 1; }
+  if command -v sha256sum >/dev/null 2>&1; then
+    hash_output="$(command sha256sum -- "$file")" || return 1
+  elif command -v shasum >/dev/null 2>&1; then
+    hash_output="$(command shasum -a 256 -- "$file")" || return 1
+  else
+    log_err "SHA-256 verification requires sha256sum or shasum"
+    return 1
+  fi
+  actual="${hash_output%% *}"
+  if [ "$actual" != "$expected" ]; then
+    log_err "checksum mismatch for ${file##*/}"
+    return 1
+  fi
+}
+
 download_models() {
   command -v curl >/dev/null 2>&1 || die "curl not found"
-  local entry url reldir fname dest dir
+  local entry url reldir fname expected dest dir download_tmp
   for entry in "${MODELS[@]}"; do
     url="${entry%%|*}"; entry="${entry#*|}"
-    reldir="${entry%%|*}"; fname="${entry##*|}"
+    reldir="${entry%%|*}"; entry="${entry#*|}"
+    fname="${entry%%|*}"; expected="${entry##*|}"
     dir="$COMFY_HOME/models/$reldir"
     dest="$dir/$fname"
-    if [ -f "$dest" ]; then
-      log_skip "$reldir/$fname already downloaded"
+    if [ -e "$dest" ] || [ -L "$dest" ]; then
+      [ -f "$dest" ] || die "model path is not a regular file: $dest"
+      verify_checksum "$dest" "$expected" || die "existing model failed verification: $fname (left unchanged)"
+      log_skip "$reldir/$fname already downloaded and verified"
       continue
     fi
     mkdir -p "$dir"
+    # A unique sibling prevents following an old predictable .partial symlink.
+    download_tmp="$(mktemp "$dest.partial.XXXXXX")" || die "cannot create model download temporary file"
     log_step "downloading $fname → models/$reldir (large — may take a while)"
-    # Download to a temp file so an interrupted run never leaves a truncated model
-    # that the skip-check would treat as complete.
-    if curl -fL --retry 3 --retry-delay 5 -o "$dest.partial" "$url" >&2; then
-      mv "$dest.partial" "$dest"
-      log_ok "$reldir/$fname"
+    if command curl -fL --retry 3 --retry-delay 5 -o "$download_tmp" "$url" >&2; then
+      if ! verify_checksum "$download_tmp" "$expected"; then
+        rm -f -- "$download_tmp"
+        die "downloaded model failed checksum verification: $fname"
+      fi
+      if ! mv "$download_tmp" "$dest"; then
+        rm -f -- "$download_tmp"
+        die "cannot install verified model: $fname"
+      fi
+      log_ok "$reldir/$fname (SHA-256 verified)"
     else
-      rm -f "$dest.partial"
+      rm -f -- "$download_tmp"
       die "download failed for $url"
     fi
   done
