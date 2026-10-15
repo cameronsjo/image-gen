@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 from image_gen.auth import AuthenticatedUser, get_current_user
 from image_gen.db import repository
 from image_gen.exceptions import StorageError
-from image_gen.models import GenerationResponse
+from image_gen.models import CostSummaryResponse, GenerationResponse
 from image_gen.services.storage import StorageService
 
 router = APIRouter(prefix="/api")
@@ -25,6 +25,18 @@ async def list_images(
     db = request.app.state.db
     return await repository.list_generations(
         db, user_id=current_user.user_id, limit=limit, offset=offset
+    )
+
+
+@router.get("/images/costs")
+async def image_costs(
+    request: Request,
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+) -> CostSummaryResponse:
+    """Return the caller's reported-cost aggregates for all time and today."""
+    return await repository.summarize_costs(
+        request.app.state.db,
+        user_id=current_user.user_id,
     )
 
 

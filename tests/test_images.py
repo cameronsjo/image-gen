@@ -147,3 +147,101 @@ async def test_user_controlled_names_stay_contained(client):
         assert record["id"] not in ids
         ids.add(record["id"])
         assert (await client.get(f"/api/images/{record['id']}/file")).status_code == 200
+
+
+async def test_cost_summary_is_user_scoped_and_reconciles_statuses(client):
+    """The aggregate is all-time/today and excludes non-completed rows from cost."""
+    from datetime import UTC, datetime, timedelta
+
+    from image_gen.db import repository
+    from image_gen.models import GenerationStatus
+
+    db = client._transport.app.state.db
+
+    async def add_record(user_id, status, cost=None, created_at=None):
+        record = await repository.create_generation(
+            db,
+            user_id=user_id,
+            name=f"summary-{status}",
+            prompt="A summary test image",
+            aspect_ratio="1:1",
+            resolution="1K",
+        )
+        updates = {"status": status}
+        if cost is not None:
+            updates["cost_usd"] = cost
+        await repository.update_generation(db, record.id, **updates)
+        if created_at is not None:
+            await db.execute(
+                "UPDATE generations SET created_at = ? WHERE id = ?",
+                (created_at.isoformat(), record.id),
+            )
+            await db.commit()
+        return record
+
+    now = datetime.now(UTC).replace(microsecond=0)
+    yesterday = now - timedelta(days=1)
+    await add_record("anonymous", GenerationStatus.COMPLETED, 0.0042, now)
+    await add_record("anonymous", GenerationStatus.COMPLETED, created_at=now)
+    await add_record("anonymous", GenerationStatus.COMPLETED, float("inf"), now)
+    for _ in range(13):
+        await add_record("anonymous", GenerationStatus.COMPLETED, 0.0, now)
+    await add_record("anonymous", GenerationStatus.PENDING, created_at=now)
+    await add_record("anonymous", GenerationStatus.GENERATING, created_at=now)
+    await add_record("anonymous", GenerationStatus.FAILED, created_at=now)
+    await add_record("anonymous", GenerationStatus.COMPLETED, 0.9, yesterday)
+    await add_record("anonymous", GenerationStatus.COMPLETED, 0.7, now + timedelta(days=1))
+    await add_record("other-user", GenerationStatus.COMPLETED, 1.0, now)
+
+    response = await client.get("/api/images/costs")
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["all_time"] == {
+        "total_count": 21,
+        "known_cost_usd": 1.6042,
+        "completed_known_count": 16,
+        "completed_unknown_count": 2,
+        "pending_count": 1,
+        "generating_count": 1,
+        "failed_count": 1,
+        "other_count": 0,
+    }
+    assert body["today"] == {
+        "total_count": 19,
+        "known_cost_usd": 0.0042,
+        "completed_known_count": 14,
+        "completed_unknown_count": 2,
+        "pending_count": 1,
+        "generating_count": 1,
+        "failed_count": 1,
+        "other_count": 0,
+    }
+
+
+async def test_cost_summary_overflow_remains_explicitly_unknown(client):
+    from image_gen.db import repository
+    from image_gen.models import GenerationStatus
+
+    db = client._transport.app.state.db
+    for _ in range(2):
+        record = await repository.create_generation(
+            db,
+            user_id="anonymous",
+            name="overflow",
+            prompt="A test image",
+            aspect_ratio="1:1",
+            resolution="1K",
+        )
+        await repository.update_generation(
+            db,
+            record.id,
+            status=GenerationStatus.COMPLETED,
+            cost_usd=1e308,
+        )
+    summary = await repository.summarize_costs(db, user_id="anonymous")
+    assert summary.all_time.completed_known_count == 2
+    assert summary.all_time.known_cost_usd is None
+    response = await client.get("/api/images/costs")
+    assert response.status_code == 200
+    assert response.json()["all_time"]["known_cost_usd"] is None

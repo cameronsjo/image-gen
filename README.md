@@ -129,6 +129,7 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 | `GET` | `/ready` | No | Readiness probe (DB + providers + discovered models) |
 | `POST` | `/api/generate` | Yes | Generate an image from a text prompt |
 | `GET` | `/api/images` | Yes | List generation records |
+| `GET` | `/api/images/costs` | Yes | Reported-cost aggregates (all time and current UTC day) |
 | `GET` | `/api/images/{id}` | Yes | Get generation metadata |
 | `GET` | `/api/images/{id}/file` | Yes | Download generated image |
 | `POST` | `/mcp` | JWT | MCP server (Streamable HTTP) |
@@ -265,6 +266,10 @@ Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `
 ## ComfyUI response limit
 
 `IMAGEGEN_COMFYUI_MAX_IMAGE_BYTES` limits each `/view` image to 64 MiB by default and must be positive. Increase it explicitly for larger custom workflows. Both declared length and actual streamed bytes are checked, including responses without a length or with a misleading length. ComfyUI image requests ask for identity encoding; unexpected compressed responses are rejected to avoid expansion before the limit. Normal PNG responses and existing timeout behavior are unchanged.
+
+## History costs
+
+The UI shows per-generation reported costs and separate server aggregates for all time and the current UTC day, scoped by generation creation time. Completed rows without a reported cost are labeled unknown and excluded from the aggregate; pending, generating, and failed rows are counted by status separately. These are reported-cost summaries, not billing totals.
 
 ### Generation usage metadata
 

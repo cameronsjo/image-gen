@@ -24,3 +24,12 @@ Release Please owns generated changelog entries. No merge/deployment is authoriz
 - [x] Codex independently reran both ComfyUI suites: 56 tests pass.
 
 Independent fix review and final pushed-head/CI evidence are tracked in report-fix1.md.
+
+## Standing-order reconciliation after #42
+
+Resolved README against main c45212c while retaining ComfyUI limits, history costs,
+usage metadata and storage documentation. CHANGELOG.md remains unchanged from main.
+Final checks and delivery are appended to report-fix1.md.
+
+Reconciled local gates passed: 358 tests, 90.62% coverage, lint/format/types.
+Codex reviewed the README-only conflict inline; response-limit source is unchanged.
