@@ -129,6 +129,7 @@ gh attestation verify oci://ghcr.io/cameronsjo/image-gen:latest \
 | `GET` | `/ready` | No | Readiness probe (DB + providers + discovered models) |
 | `POST` | `/api/generate` | Yes | Generate an image from a text prompt |
 | `GET` | `/api/images` | Yes | List generation records |
+| `GET` | `/api/images/costs` | Yes | Reported-cost aggregates (all time and current UTC day) |
 | `GET` | `/api/images/{id}` | Yes | Get generation metadata |
 | `GET` | `/api/images/{id}/file` | Yes | Download generated image |
 | `POST` | `/mcp` | JWT | MCP server (Streamable HTTP) |
