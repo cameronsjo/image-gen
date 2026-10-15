@@ -29,3 +29,15 @@ Source: https://ai.google.dev/gemini-api/docs/deprecations
 
 - [x] Merge origin/main after #43; retain both README sections and descriptive-storage callers.
 - [x] Verify full local gates on the combined artifact: 346 tests, 91.29% coverage, lint/format/types and build pass. Final push/CI evidence is in report-fix1.md.
+
+## Fix round 2
+
+- [x] Keep the approved supported subset; change PR relationship to Part of #24 with an exact coverage list.
+- [x] Execute shipped showResult on REST metadata and assert rendered $0.134000, zero and unknown behavior.
+- [x] Include estimated_output_cost_usd in the generation-completed log, preserving zero/null.
+
+Final local checks, review and pushed-head CI are appended to report-fix1.md.
+
+Fix-round 2 local gates passed: 349 tests, 91.29% coverage, lint/format/types,
+and package builds. The wrong-rendered-value negative control failed as expected.
+Codex reviewed this narrow log/test/documentation increment inline; no supported findings.

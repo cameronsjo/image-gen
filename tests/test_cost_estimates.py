@@ -1,6 +1,8 @@
 """Published exact combinations and separate output-estimate persistence."""
 
 import base64
+import json
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -122,7 +124,39 @@ async def test_estimate_round_trip_separate_from_reported_cost(client, mock_gemi
     assert fetched["estimated_output_cost_usd"] == 0.134
     assert (await client.get("/api/images")).json()[0]["estimated_output_cost_usd"] == 0.134
     page = (await client.get("/ui/")).text
-    assert "estimated output cost (published table; excludes input/other charges)" in page
+    # Execute the shipped renderer on the real REST record, not a label search.
+    script = r"""
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const {page, record} = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+const renderer = page.match(/function showResult\(rec\)\{[\s\S]*?\n  \}/);
+assert.ok(renderer, 'shipped result renderer must exist');
+const stage = {style:{}};
+const els = {
+  img:{closest:()=>stage}, dim:{}, overlay:{}, meta:{},
+  btnDownload:{}, btnOpen:{}
+};
+const context = {
+  els, API:{file:id=>'/api/images/'+id+'/file'},
+  clearError:()=>{}, ratioOf:()=>1, dur:()=>'', dims:()=>'', relTime:()=>'',
+  escapeHtml:value=>String(value), setMode:()=>{}
+};
+vm.runInNewContext(renderer[0], context);
+context.showResult(record);
+const label = '<dt>estimated output cost (published table; excludes input/other charges)</dt>';
+assert.ok(els.meta.innerHTML.includes(label+'<dd class="num">$0.134000</dd>'));
+context.showResult({...record, estimated_output_cost_usd:0});
+assert.ok(els.meta.innerHTML.includes(label+'<dd class="num">$0.000000</dd>'));
+context.showResult({...record, estimated_output_cost_usd:null});
+assert.ok(!els.meta.innerHTML.includes(label));
+"""
+    subprocess.run(
+        ["node", "-e", script],
+        input=json.dumps({"page": page, "record": record}),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
 
 
 async def test_unknown_estimate_is_recorded_as_null(client):
@@ -167,3 +201,19 @@ async def test_legacy_migration_keeps_estimates_unknown(tmp_path):
         assert record.estimated_output_cost_usd == 0.006
     finally:
         await db.close()
+
+
+@pytest.mark.parametrize("estimate", [0.134, 0.0, None])
+async def test_completion_log_preserves_estimate(client, mock_gemini_result, estimate):
+    mock_gemini_result.estimated_output_cost_usd = estimate
+    with patch("image_gen.api.generate.logger.info") as log_info:
+        response = await client.post(
+            "/api/generate", json={"name": "logged estimate", "prompt": PROMPT}
+        )
+    assert response.status_code == 201
+    completed = [
+        call for call in log_info.call_args_list if call.args == ("Image generation completed",)
+    ]
+    assert len(completed) == 1
+    assert completed[0].kwargs["estimated_output_cost_usd"] == estimate
+    assert completed[0].kwargs["cost_usd"] is None
