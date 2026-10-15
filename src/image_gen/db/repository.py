@@ -1,7 +1,9 @@
 """Generation record CRUD operations."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from math import isfinite
+from typing import Any
 
 import aiosqlite
 import structlog
@@ -40,6 +42,11 @@ def _row_to_response(row: aiosqlite.Row) -> GenerationResponse:
         file_path=row["file_path"],
         file_size=row["file_size"],
         cost_usd=cost_usd_val,
+        usage=(
+            json.loads(row["usage_json"])
+            if "usage_json" in row.keys() and row["usage_json"] is not None  # noqa: SIM118
+            else None
+        ),
         created_at=datetime.fromisoformat(row["created_at"]),
         completed_at=(datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None),
     )
@@ -114,6 +121,7 @@ async def update_generation(
     file_path: str | None = None,
     file_size: int | None = None,
     cost_usd: float | None = None,
+    usage: dict[str, Any] | None = None,
     completed_at: datetime | None = None,
 ) -> None:
     """Update fields on an existing generation record."""
@@ -135,6 +143,9 @@ async def update_generation(
     if cost_usd is not None:
         updates.append("cost_usd = ?")
         params.append(cost_usd)
+    if usage is not None:
+        updates.append("usage_json = ?")
+        params.append(json.dumps(usage))
     if completed_at is not None:
         updates.append("completed_at = ?")
         params.append(completed_at.isoformat())

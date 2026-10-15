@@ -15,7 +15,7 @@ sees it. See [ADR 0004](adr/0004-local-comfyui-provider.md) for the rationale.
 Run the setup script in a separate terminal. It installs `comfy-cli`, installs
 ComfyUI (its own MPS PyTorch venv), and downloads the FLUX.1-schnell split files
 (~33 GB total). It is reentrant — re-run it after a partial download and it skips
-what is already present.
+what is already present only after its SHA-256 matches the pinned manifest.
 
 ```bash
 bash scripts/setup-comfyui.sh            # install + download, prints the launch command
@@ -29,7 +29,11 @@ bash scripts/setup-comfyui.sh --launch   # also launch ComfyUI on 127.0.0.1:8188
 | `clip_l.safetensors` | `models/clip/` | flux_text_encoders |
 | `t5xxl_fp16.safetensors` | `models/clip/` | flux_text_encoders |
 
-FLUX.1-schnell is Apache-2.0 and ungated — no Hugging Face token required.
+FLUX.1-schnell is Apache-2.0, but publisher hosting access may require approval. The setup script does not acquire or manage credentials. If the publisher rejects an unauthenticated download, pre-provision the authorized file in its listed model directory; rerunning setup verifies its bytes before accepting it.
+
+Downloads use immutable Hugging Face revisions and a pinned SHA-256 per file. The script supports `sha256sum` (Linux) and `shasum -a 256` (macOS), fails if hashing fails, and removes a newly downloaded temporary file on mismatch. Existing mismatched files are rejected and left unchanged for the operator to inspect.
+
+Checksum provenance: [FLUX publisher metadata](https://huggingface.co/api/models/black-forest-labs/FLUX.1-schnell/tree/741f7c3ce8b383c54771c7003378a50191e9efe9?expand=true) and [text-encoder Git-LFS metadata](https://huggingface.co/api/models/comfyanonymous/flux_text_encoders/tree/6af2a98e3f615bdfa612fbd85da93d1ed5f69ef5?expand=true). The FLUX metadata exposes the SHA-256 in its per-file security-scan links; the text encoders expose Git-LFS SHA-256 object IDs. File names and bytes remain unchanged; only revision pinning and verification are added.
 
 ### Confirm Metal works and export the workflow
 
