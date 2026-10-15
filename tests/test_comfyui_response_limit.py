@@ -1,6 +1,7 @@
 """Real HTTPX streaming transport exercises bounded reads and resource closure."""
 
 from contextlib import asynccontextmanager
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -77,22 +78,65 @@ async def test_limit_is_configurable():
 
 @pytest.mark.parametrize("status", [400, 404, 500])
 async def test_error_response_is_closed_without_buffering(status):
-    async with response([b"large-error-body"] * 10, status=status) as (provider, stream):
-        with pytest.raises(ProviderError, match=f"HTTP {status}"):
-            await provider._fetch_image({"filename": "test.png"})
+    with patch("image_gen.services.comfyui_provider.logger.error") as log_error:
+        async with response([b"large-error-body"] * 10, status=status) as (provider, stream):
+            with pytest.raises(ProviderError, match=f"HTTP {status}"):
+                await provider._fetch_image({"filename": "test.png"})
         assert stream.reads == 0
         assert stream.closed
+    assert log_error.call_args.args == ("ComfyUI fetch error",)
+    assert log_error.call_args.kwargs == {"status": status, "filename": "test.png"}
 
 
 async def test_compressed_response_rejected_before_expansion():
-    async with response([b"compressed"], headers={"Content-Encoding": "gzip"}) as (
-        provider,
-        stream,
-    ):
-        with pytest.raises(ProviderError, match="Content-Encoding"):
-            await provider._fetch_image({"filename": "test.png"})
+    with patch("image_gen.services.comfyui_provider.logger.error") as log_error:
+        async with response([b"compressed"], headers={"Content-Encoding": "gzip"}) as (
+            provider,
+            stream,
+        ):
+            with pytest.raises(ProviderError, match="Content-Encoding"):
+                await provider._fetch_image({"filename": "test.png"})
         assert stream.reads == 0
         assert stream.closed
+    assert log_error.call_args.args == ("ComfyUI fetch error",)
+    assert log_error.call_args.kwargs == {
+        "status": 200,
+        "filename": "test.png",
+        "reason": "unsupported_content_encoding",
+        "content_encoding": "gzip",
+    }
+
+
+async def test_declared_size_rejection_logs_status_and_filename_without_body():
+    with patch("image_gen.services.comfyui_provider.logger.error") as log_error:
+        async with response([b"x"], headers={"Content-Length": "999"}) as (provider, stream):
+            with pytest.raises(ProviderError, match="response-size limit"):
+                await provider._fetch_image({"filename": "test.png"})
+            assert stream.reads == 0
+            assert stream.closed
+    assert log_error.call_args.args == ("ComfyUI fetch error",)
+    assert log_error.call_args.kwargs == {
+        "status": 200,
+        "filename": "test.png",
+        "reason": "declared_size_limit",
+        "declared_size": 999,
+        "limit": 8,
+    }
+
+
+async def test_actual_size_rejection_logs_status_and_filename_without_body():
+    with patch("image_gen.services.comfyui_provider.logger.error") as log_error:
+        async with response([b"abcd"] * 10) as (provider, stream):
+            with pytest.raises(ProviderError, match="response-size limit"):
+                await provider._fetch_image({"filename": "test.png"})
+            assert stream.closed
+    assert log_error.call_args.args == ("ComfyUI fetch error",)
+    assert log_error.call_args.kwargs == {
+        "status": 200,
+        "filename": "test.png",
+        "reason": "actual_size_limit",
+        "limit": 8,
+    }
 
 
 @pytest.mark.parametrize("limit", [0, -1])
