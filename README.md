@@ -264,7 +264,7 @@ Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `
 
 ## History costs
 
-The UI shows per-generation reported costs and a known-cost total for the loaded history (the most recent 12 records). Unknown costs are labeled and excluded from the total. This is not an all-time spending total.
+The UI shows per-generation reported costs and separate server aggregates for all time and the current UTC day, scoped by generation creation time. Completed rows without a reported cost are labeled unknown and excluded from the aggregate; pending, generating, and failed rows are counted by status separately. These are reported-cost summaries, not billing totals.
 
 ## Stored image names
 

@@ -221,6 +221,7 @@ button{ font:inherit; }
     ready:   '/ready',
     generate:'/api/generate',
     images:  '/api/images',
+    costs:   '/api/images/costs',
     file:    function(id){ return '/api/images/' + encodeURIComponent(id) + '/file'; }
   };
   // Optional bearer token (only used if auth is enabled on the server).
@@ -400,13 +401,19 @@ button{ font:inherit; }
     return data.items || data.images || data.results || data.data || [];
   }
   function loadHistory(selectLatest){
-    return fetch(API.images+'?limit=12', { headers: TOKEN?{Authorization:'Bearer '+TOKEN}:{} })
+    els.historyCost.textContent = 'Loading cost summary…';
+    var authHeaders = TOKEN?{Authorization:'Bearer '+TOKEN}:{};
+    var images = fetch(API.images+'?limit=12', { headers: authHeaders })
       .then(function(r){ if(!r.ok) throw new Error('images '+r.status); return r.json(); })
       .then(function(data){ renderHistory(asList(data), selectLatest); })
       .catch(function(){ renderHistory([], false); });
+    var costs = fetch(API.costs, { headers: authHeaders })
+      .then(function(r){ if(!r.ok) throw new Error('costs '+r.status); return r.json(); })
+      .then(function(data){ els.historyCost.textContent = ImageCosts.summarizeAggregate(data); })
+      .catch(function(){ els.historyCost.textContent = 'Cost summary unavailable.'; });
+    return Promise.all([images, costs]);
   }
   function renderHistory(items, selectLatest){
-    els.historyCost.textContent = ImageCosts.summarize(items);
     els.historyCount.textContent = items.length ? (items.length+' image'+(items.length>1?'s':'')) : '';
     els.historyList.innerHTML='';
     if(!items.length){
@@ -421,7 +428,7 @@ button{ font:inherit; }
         '<time>'+relTime(rec.created_at||rec.createdAt||rec.created)+'</time>'+
         thumb+
         '<span class="nm">'+escapeHtml(rec.name||rec.id)+'</span>'+
-        '<span class="mt num">'+(rec.aspect_ratio||'')+(rec.resolution?' · '+rec.resolution:'')+' · '+ImageCosts.format(rec.cost_usd)+'</span>';
+        '<span class="mt num">'+(rec.aspect_ratio||'')+(rec.resolution?' · '+rec.resolution:'')+' · '+ImageCosts.formatRecord(rec)+'</span>';
       row.addEventListener('click', function(){
         if(done){ showResult(rec); markCurrent(rec.id); }
       });

@@ -1,12 +1,19 @@
 """Generation record CRUD operations."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from math import isfinite
 
 import aiosqlite
 import structlog
 from ulid import ULID
 
-from image_gen.models import GenerationResponse, GenerationStatus, ProviderName
+from image_gen.models import (
+    CostAggregate,
+    CostSummaryResponse,
+    GenerationResponse,
+    GenerationStatus,
+    ProviderName,
+)
 
 logger = structlog.get_logger()
 
@@ -173,3 +180,88 @@ async def list_generations(
         )
     rows = await cursor.fetchall()
     return [_row_to_response(row) for row in rows]
+
+
+async def _aggregate_costs(
+    db: aiosqlite.Connection,
+    *,
+    user_id: str,
+    since: str | None,
+    until: str | None = None,
+) -> CostAggregate:
+    """Aggregate one user-scoped time window without loading generation rows."""
+    clauses = ["user_id = ?"]
+    params: list[object] = [user_id]
+    if since is not None:
+        clauses.append("created_at >= ?")
+        params.append(since)
+    if until is not None:
+        clauses.append("created_at < ?")
+        params.append(until)
+
+    # SQLite can store IEEE infinity in a REAL column.  Treat it and any
+    # nonnumeric value as an unknown reported cost, matching the UI's finite
+    # number check and keeping the JSON response serializable.
+    finite_cost = "cost_usd IS NOT NULL AND cost_usd >= 0 AND cost_usd < ?"
+    query_params: list[object] = [float("inf"), float("inf"), float("inf"), *params]
+    cursor = await db.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_count,
+            COALESCE(SUM(CASE WHEN status = 'completed'
+                AND {finite_cost} THEN 1 ELSE 0 END), 0)
+                AS completed_known_count,
+            COALESCE(SUM(CASE WHEN status = 'completed'
+                AND NOT ({finite_cost}) THEN 1 ELSE 0 END), 0)
+                AS completed_unknown_count,
+            COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0)
+                AS pending_count,
+            COALESCE(SUM(CASE WHEN status = 'generating' THEN 1 ELSE 0 END), 0)
+                AS generating_count,
+            COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0)
+                AS failed_count,
+            COALESCE(SUM(CASE WHEN status IS NULL
+                OR status NOT IN ('completed', 'pending', 'generating', 'failed')
+                THEN 1 ELSE 0 END), 0) AS other_count,
+            COALESCE(SUM(CASE WHEN status = 'completed'
+                AND {finite_cost} THEN cost_usd ELSE 0 END), 0)
+                AS known_cost_usd
+        FROM generations
+        WHERE {" AND ".join(clauses)}
+        """,
+        query_params,
+    )
+    row = await cursor.fetchone()
+    if row is None:  # pragma: no cover - COUNT(*) always returns one row
+        raise RuntimeError("cost aggregate query returned no row")
+
+    completed_known_count = int(row["completed_known_count"])
+    total = float(row["known_cost_usd"])
+    return CostAggregate(
+        total_count=int(row["total_count"]),
+        known_cost_usd=(total if completed_known_count and isfinite(total) else None),
+        completed_known_count=completed_known_count,
+        completed_unknown_count=int(row["completed_unknown_count"]),
+        pending_count=int(row["pending_count"]),
+        generating_count=int(row["generating_count"]),
+        failed_count=int(row["failed_count"]),
+        other_count=int(row["other_count"]),
+    )
+
+
+async def summarize_costs(
+    db: aiosqlite.Connection,
+    *,
+    user_id: str,
+) -> CostSummaryResponse:
+    """Return user-scoped all-time and current-UTC-day reported-cost aggregates."""
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    return CostSummaryResponse(
+        all_time=await _aggregate_costs(db, user_id=user_id, since=None),
+        today=await _aggregate_costs(
+            db,
+            user_id=user_id,
+            since=today.isoformat(),
+            until=(today + timedelta(days=1)).isoformat(),
+        ),
+    )
