@@ -132,6 +132,7 @@ class ComfyUIProvider(ImageProvider):
         self._model = settings.comfyui_model
         self._steps = settings.comfyui_steps
         self._timeout = settings.request_timeout_seconds
+        self._max_image_bytes = settings.comfyui_max_image_bytes
         # A stable client_id ties our /prompt submissions to one ComfyUI session.
         self._client_id = str(uuid.uuid4())
         # Load the workflow template once (bundled package data unless overridden)
@@ -326,16 +327,59 @@ class ComfyUIProvider(ImageProvider):
             "subfolder": image_ref.get("subfolder", ""),
             "type": image_ref.get("type", "output"),
         }
-        resp = await self._client.get(f"{self._base_url}/view", params=params)
-        if resp.status_code >= 400:
-            msg = f"ComfyUI /view returned HTTP {resp.status_code}"
-            logger.error(
-                "ComfyUI fetch error", status=resp.status_code, filename=image_ref.get("filename")
-            )
-            raise ProviderError(msg)
-
-        logger.debug("Image successfully fetched from ComfyUI", size_bytes=len(resp.content))
-        return resp.content
+        async with self._client.stream(
+            "GET", f"{self._base_url}/view", params=params, headers={"Accept-Encoding": "identity"}
+        ) as resp:
+            if resp.status_code >= 400:
+                logger.error(
+                    "ComfyUI fetch error",
+                    status=resp.status_code,
+                    filename=image_ref.get("filename"),
+                )
+                raise ProviderError(f"ComfyUI /view returned HTTP {resp.status_code}")
+            # Do not let an unexpected compressed response expand before the cap
+            # is applied. ComfyUI normally serves the already-compressed PNG.
+            content_encoding = resp.headers.get("Content-Encoding", "identity").strip().lower()
+            if content_encoding not in (
+                "",
+                "identity",
+            ):
+                logger.error(
+                    "ComfyUI fetch error",
+                    status=resp.status_code,
+                    filename=image_ref.get("filename"),
+                    reason="unsupported_content_encoding",
+                    content_encoding=content_encoding,
+                )
+                raise ProviderError("ComfyUI /view returned unsupported Content-Encoding")
+            try:
+                declared_size = int(resp.headers.get("Content-Length", "0"))
+            except ValueError:
+                declared_size = 0
+            if declared_size > self._max_image_bytes:
+                logger.error(
+                    "ComfyUI fetch error",
+                    status=resp.status_code,
+                    filename=image_ref.get("filename"),
+                    reason="declared_size_limit",
+                    declared_size=declared_size,
+                    limit=self._max_image_bytes,
+                )
+                raise ProviderError("ComfyUI image exceeds configured response-size limit")
+            data = bytearray()
+            async for chunk in resp.aiter_bytes(chunk_size=min(65536, self._max_image_bytes + 1)):
+                if len(data) + len(chunk) > self._max_image_bytes:
+                    logger.error(
+                        "ComfyUI fetch error",
+                        status=resp.status_code,
+                        filename=image_ref.get("filename"),
+                        reason="actual_size_limit",
+                        limit=self._max_image_bytes,
+                    )
+                    raise ProviderError("ComfyUI image exceeds configured response-size limit")
+                data.extend(chunk)
+        logger.debug("Image successfully fetched from ComfyUI", size_bytes=len(data))
+        return bytes(data)
 
     async def list_models(self) -> list[str]:
         """Best-effort enumeration of available diffusion models (default first).

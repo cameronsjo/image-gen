@@ -5,6 +5,7 @@ ComfyUI), and the multi-call flow is driven with ``post``/``get`` side-effect li
 queued ``/prompt`` → pending ``/history`` → completed ``/history`` → ``/view`` bytes.
 """
 
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -90,11 +91,20 @@ def _view_response():
     return httpx.Response(200, content=_FAKE_PNG)
 
 
+def _install_stream_mock(client):
+    @asynccontextmanager
+    async def stream(method, url, **kwargs):
+        yield await client.get(url, **kwargs)
+
+    client.stream = stream
+
+
 def _build_provider(settings=None):
     """Construct a provider whose pooled client is a mock (no real sockets)."""
     settings = settings or _make_settings()
     with patch("image_gen.services.comfyui_provider.httpx.AsyncClient") as mock_cls:
         mock_client = AsyncMock()
+        _install_stream_mock(mock_client)
         mock_cls.return_value = mock_client
         provider = ComfyUIProvider(settings)
     return provider, mock_client
@@ -291,6 +301,7 @@ class TestComfyUIProvider:
     async def test_pooled_client_reused_across_calls(self):
         with patch("image_gen.services.comfyui_provider.httpx.AsyncClient") as mock_cls:
             mock_client = AsyncMock()
+            _install_stream_mock(mock_client)
             mock_client.post = AsyncMock(return_value=_queued_response())
             mock_client.get = AsyncMock(
                 side_effect=[
