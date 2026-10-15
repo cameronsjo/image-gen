@@ -266,6 +266,10 @@ Rate limiting uses a token-bucket per user (`IMAGEGEN_QUOTA_MAX_TOKENS` burst, `
 
 The UI shows per-generation reported costs and a known-cost total for the loaded history (the most recent 12 records). Unknown costs are labeled and excluded from the total. This is not an all-time spending total.
 
+## Stored image names
+
+New REST and MCP generations store the same descriptive, collision-free basename offered for download. Existing ULID-only files remain readable at their persisted paths; no bulk rename is performed. Stored paths are resolved and checked against the configured images directory before serving, including symlinks. Legacy relative paths retain their original process-working-directory interpretation. New writes refuse existing filenames instead of overwriting them.
+
 ## License
 
 MIT
