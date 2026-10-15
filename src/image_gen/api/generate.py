@@ -123,6 +123,7 @@ async def generate(body: GenerationRequest, request: Request) -> GenerationRespo
             file_path=str(file_path),
             file_size=file_size,
             cost_usd=result.cost_usd,
+            estimated_output_cost_usd=result.estimated_output_cost_usd,
             completed_at=now,
         )
 

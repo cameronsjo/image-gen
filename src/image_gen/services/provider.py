@@ -26,6 +26,8 @@ class ProviderResult:
     # ``usage.cost``).  Defaulted so providers that don't surface a cost (Gemini,
     # OpenAI) construct a ProviderResult unchanged and leave it ``None``.
     cost_usd: float | None = None
+    # Separate from reported charges: published table image output only.
+    estimated_output_cost_usd: float | None = None
 
 
 def decode_b64_image(b64: str, provider_name: str) -> bytes:

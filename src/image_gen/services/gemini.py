@@ -24,6 +24,7 @@ from google.genai import types
 
 from image_gen.config import Settings
 from image_gen.exceptions import ProviderError
+from image_gen.services.pricing import gemini_output_estimate
 from image_gen.services.provider import ImageProvider, ProviderResult, models_with_default
 
 logger = structlog.get_logger()
@@ -107,6 +108,7 @@ class GeminiProvider(ImageProvider):
                         return ProviderResult(
                             image_data=part.inline_data.data,
                             mime_type=part.inline_data.mime_type or "image/png",
+                            estimated_output_cost_usd=gemini_output_estimate(model, resolution),
                         )
 
                 # Response parsed cleanly but contained no image — the model
