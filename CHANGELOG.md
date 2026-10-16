@@ -1,5 +1,49 @@
 # Changelog
 
+## [0.2.0](https://github.com/cameronsjo/image-gen/compare/v0.1.8...v0.2.0) (2026-10-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **mcp:** /mcp now rejects untrusted Host/Origin headers with HTTP 403. Before upgrading LAN/Traefik deployments, configure MCP_ALLOWED_HOSTS and matching MCP_ALLOWED_ORIGINS as JSON arrays, for example ["images.example.lan"] and ["https://images.example.lan"]. These variable names are unprefixed and do not accept comma-separated strings.
+
+### Features
+
+* **mcp:** document protected-host upgrade requirements ([311273b](https://github.com/cameronsjo/image-gen/commit/311273bc7fd82e6fa36b677b8dc05eadbe3039b0))
+* **mcp:** support per-generation model selection ([2efeffa](https://github.com/cameronsjo/image-gen/commit/2efeffa1ecc173df4b08b7ef74bf62417567123d))
+* **mcp:** support per-generation model selection ([7b0ec7f](https://github.com/cameronsjo/image-gen/commit/7b0ec7f6114a1541e6d7dd3405e0fe4b6f3fdccd))
+* **providers:** add supported output-cost estimates ([0a3926a](https://github.com/cameronsjo/image-gen/commit/0a3926a3a34e83e1505d9a15e10cde5eb6f307fd))
+* **providers:** add supported output-cost estimates ([40fef8c](https://github.com/cameronsjo/image-gen/commit/40fef8ce20734f94cbba16e31cc713cd6d3d9b63))
+* **providers:** persist OpenRouter usage metadata ([e872b8d](https://github.com/cameronsjo/image-gen/commit/e872b8df497a033800848fd63812026cc3d4215e))
+* **providers:** persist OpenRouter usage metadata ([802f87c](https://github.com/cameronsjo/image-gen/commit/802f87ce14ebbc6a430214fe8ddc7427bfece47b))
+* **storage:** save descriptive contained image filenames ([615b109](https://github.com/cameronsjo/image-gen/commit/615b109d438eb69335a4ea1ba7b3ed0a452bbba3))
+* **storage:** save descriptive contained image filenames ([3c374ac](https://github.com/cameronsjo/image-gen/commit/3c374ac414e0977d06a1ac86c224cce840761423))
+* **ui:** show costs and totals for loaded history ([447713d](https://github.com/cameronsjo/image-gen/commit/447713d9afe4e0e4083f888a667117eed75f1316))
+* **ui:** show history costs with server aggregates ([c45212c](https://github.com/cameronsjo/image-gen/commit/c45212c8736088ea3904e0490f543abc18909921))
+
+
+### Bug Fixes
+
+* **comfyui:** bound streamed image response size ([af459ee](https://github.com/cameronsjo/image-gen/commit/af459eee27f332a8fcef6a2758b713c1389d1b4a))
+* **comfyui:** bound streamed image response size ([46febd0](https://github.com/cameronsjo/image-gen/commit/46febd04ddf7c6162c94b5978ad4f1fc8dc72d6d))
+* **comfyui:** restore bounded image rejection logs ([a05e9a5](https://github.com/cameronsjo/image-gen/commit/a05e9a5e9c87fd05ac19bb4fbfce8438f9cb69aa))
+* **estimates:** verify rendered values and log output estimates ([cd42a82](https://github.com/cameronsjo/image-gen/commit/cd42a820f63def92728975cb8e78d1feec5302f0))
+* **mcp:** enforce identity expiry and request-origin protection ([eb11b03](https://github.com/cameronsjo/image-gen/commit/eb11b03b8be073c16f17c1c4e9ac79ce3e298441))
+* **mcp:** reject authenticated tokens without a nonblank subject ([9ba9981](https://github.com/cameronsjo/image-gen/commit/9ba9981b688dab43a7a40900c75a8f9d371c69f7))
+* **setup:** clean interrupted downloads and set model modes ([58b23cb](https://github.com/cameronsjo/image-gen/commit/58b23cb3a6523af1d8faec3f16d28e0419fba7d1))
+* **setup:** verify pinned model download checksums ([b392203](https://github.com/cameronsjo/image-gen/commit/b392203b44f5869a8e6d62fca7be950550512b11))
+* **setup:** verify pinned model download checksums ([9e8c9ae](https://github.com/cameronsjo/image-gen/commit/9e8c9aedba1cbea673b8c7ff8f27a220c4725dcd))
+* **ui:** aggregate history costs beyond loaded rows ([3bb8a35](https://github.com/cameronsjo/image-gen/commit/3bb8a3542c95adddd14799bfa89edf722a0ee397))
+
+
+### Documentation
+
+* **api:** list the authenticated cost aggregate endpoint ([cf5816c](https://github.com/cameronsjo/image-gen/commit/cf5816c0e5a88d89b8c87c59179e841dbeb34b91))
+* **mcp:** reconcile changelog ownership and ADR history ([f34b4b9](https://github.com/cameronsjo/image-gen/commit/f34b4b92796393518b13ec0d7c4b5c19180ea466))
+* **mcp:** record approved SDK upgrade delivery ([f54793c](https://github.com/cameronsjo/image-gen/commit/f54793cb10a230075020f11c5f9c03d5cba45d8f))
+* **mcp:** record round-three security verification ([e3bfeaa](https://github.com/cameronsjo/image-gen/commit/e3bfeaa8c298af01cf40885e0a0153ef368d3c2a))
+* **tests:** describe sizing regression assertions ([237790d](https://github.com/cameronsjo/image-gen/commit/237790d08415856af53c209c6aca86b47fb354fc))
+
 ## [0.1.8](https://github.com/cameronsjo/image-gen/compare/v0.1.7...v0.1.8) (2026-10-05)
 
 
